@@ -16,6 +16,7 @@
           <h1>NSAP</h1>
           <p>Creator Manager</p>
         </div>
+        <button class="icon-button sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle sidebar">≡</button>
       </div>
 
       <nav class="nav-list" aria-label="Primary">
@@ -47,8 +48,17 @@
 
       <div class="sidebar-panel">
         <span>Quick reminder</span>
+        <select id="globalReminderTemplate" aria-label="Reminder template">
+          <option value="inactivity">Inactivity Check</option>
+          <option value="followup">Follow-up</option>
+          <option value="collab">Collab Reminder</option>
+          <option value="update">Big Update Reminder</option>
+          <option value="thanks">Thank You</option>
+          <option value="welcome">Welcome Creator</option>
+        </select>
         <button class="button button-primary" id="copyReminder" type="button">Copy DM Template</button>
       </div>
+      <span class="sidebar-resizer" id="sidebarResizer" aria-hidden="true"></span>
     </aside>
 
     <main class="main-shell">
@@ -116,7 +126,10 @@
             <p class="eyebrow">Creator management</p>
             <h3 id="creatorsTitle">Creators</h3>
           </div>
-          <button class="button button-secondary" id="clearFilters" type="button">Clear Filters</button>
+          <div class="button-row">
+            <button class="button button-primary" id="addCreator" type="button" hidden>+ Add Creator</button>
+            <button class="button button-secondary" id="clearFilters" type="button">Clear Filters</button>
+          </div>
         </div>
 
         <section class="filter-bar" aria-label="Creator filters">
@@ -216,6 +229,10 @@
                 </select>
               </label>
             </div>
+            <div class="button-row modal-actions-row">
+              <span class="dirty-badge" id="settingsDirtyBadge" hidden>Unsaved changes</span>
+              <button class="button button-primary" id="saveSettings" type="button" disabled>Save Changes</button>
+            </div>
           </section>
 
           <section class="panel">
@@ -272,7 +289,7 @@
           <p class="eyebrow">Creator profile</p>
           <h3 id="modalName"></h3>
         </div>
-        <button class="icon-button" id="closeDialog" value="close" type="submit" aria-label="Close">x</button>
+        <button class="icon-button" id="closeDialog" type="button" aria-label="Close">x</button>
       </div>
       <div id="modalBody"></div>
     </form>
