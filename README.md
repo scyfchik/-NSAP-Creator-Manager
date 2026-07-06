@@ -1,1 +1,0 @@
-# -NSAP-Creator-Manager
