@@ -18,7 +18,6 @@ import {
 import { renderSettings } from "./ui/settings.js";
 import { showToast } from "./ui/toast.js";
 
-const reminder = "Hey! Hope you're doing well. Just wanted to remind you to keep posting Night Shift at Paulie's content when possible, especially with upcoming updates/collabs. If you need any info or ideas, feel free to ask. Thank you!";
 const unsavedMessage = "You have unsaved changes. Are you sure you want to leave?";
 
 const defaultState = {
@@ -56,6 +55,7 @@ let settings = loadSettings(defaultSettings);
 let settingsDraft = { ...settings };
 let undoStack = [];
 let quickNoteTimers = new Map();
+let searchTimer = 0;
 let modalDirty = false;
 let modalMode = "";
 let modalInitialSnapshot = "";
@@ -130,12 +130,7 @@ function wireEvents() {
     });
   });
 
-  document.getElementById("searchInput").addEventListener("input", (event) => {
-    state.search = event.target.value;
-    state.page = 1;
-    persistViewState();
-    renderCreators();
-  });
+  document.getElementById("searchInput").addEventListener("input", handleSearchInput);
 
   document.getElementById("platformFilter").addEventListener("change", (event) => updateFilter("platform", event.target.value));
   document.getElementById("statusFilter").addEventListener("change", (event) => updateFilter("status", event.target.value));
@@ -184,9 +179,7 @@ function wireEvents() {
       event.preventDefault();
     }
   });
-  document.getElementById("copyReminder").addEventListener("click", () => copyReminder("copyReminder"));
   document.getElementById("addCreator").addEventListener("click", handleOpenAddCreator);
-  document.getElementById("copyReminderSettings").addEventListener("click", () => copyReminder("copyReminderSettings"));
   document.getElementById("exportJson").addEventListener("click", exportJson);
   document.getElementById("importJson").addEventListener("click", () => document.getElementById("importJsonInput").click());
   document.getElementById("importJsonInput").addEventListener("change", importJson);
@@ -257,6 +250,17 @@ function renderCreators() {
 
   renderFilterOptions(creators, state);
   persistViewState();
+}
+
+function handleSearchInput(event) {
+  window.clearTimeout(searchTimer);
+  const value = event.target.value;
+  searchTimer = window.setTimeout(() => {
+    state.search = value;
+    state.page = 1;
+    persistViewState();
+    renderCreators();
+  }, 160);
 }
 
 function updateFilter(field, value) {
@@ -333,6 +337,12 @@ function handleModalClick(event) {
   const addButton = event.target.closest("[data-save-new-creator]");
   if (addButton) {
     createCreator(addButton);
+    return;
+  }
+
+  const cancelAdd = event.target.closest("[data-cancel-add-creator]");
+  if (cancelAdd) {
+    requestCloseModal();
     return;
   }
 
@@ -455,7 +465,7 @@ function handleOpenAddCreator() {
     return;
   }
 
-  if (!confirmLeaveModal()) {
+  if (!confirmLeaveDirty()) {
     return;
   }
 
@@ -474,19 +484,28 @@ async function createCreator(button) {
     return;
   }
 
+  if (!isModalValid()) {
+    showToast("Creator Name is required.", "error");
+    return;
+  }
+
   setSaveLoading(button, true);
   try {
-    const response = await api.createCreator(getFormValues("addCreatorForm"));
+    const payload = getFormValues("addCreatorForm");
+    const response = await api.createCreator(payload);
     creators = [response.creator, ...creators];
-    activeCreatorId = response.creator.id;
+    activeCreatorId = null;
     savedAt = new Date().toISOString();
     resetModalDirty();
     renderAll();
-    openCreatorModal(response.creator, session.permissions);
-    initializeModalDirty("timeline");
-    showToast("Changes saved successfully.");
+    document.getElementById("creatorDialog").close();
+    showToast("Creator added successfully.");
   } catch (error) {
-    showToast(error.message, "error");
+    console.error("Add Creator failed", {
+      error,
+      payload: getFormValues("addCreatorForm"),
+    });
+    showToast(error.message || "Unable to add creator. Please check the form and try again.", "error");
   } finally {
     setSaveLoading(button, false);
   }
@@ -654,19 +673,6 @@ function persistViewState() {
   saveViewState(state);
 }
 
-async function copyReminder(buttonId) {
-  const templateKey = document.getElementById("globalReminderTemplate")?.value || "inactivity";
-  const template = reminderTemplates[templateKey] || reminderTemplates.inactivity;
-  await copyText(template.build({ name: "there", status: "Active" }) || reminder);
-  const button = document.getElementById(buttonId);
-  const originalText = button.textContent;
-  button.textContent = "Copied";
-  showToast("Reminder copied");
-  window.setTimeout(() => {
-    button.textContent = originalText;
-  }, 1200);
-}
-
 async function copyText(text) {
   if (navigator.clipboard) {
     await navigator.clipboard.writeText(text);
@@ -691,14 +697,19 @@ function exportJson() {
 }
 
 async function exportJsonFromApi() {
-  const payload = await api.exportCreators();
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const anchor = document.createElement("a");
-  anchor.href = URL.createObjectURL(blob);
-  anchor.download = `creators-${new Date().toISOString().slice(0, 10)}.json`;
-  anchor.click();
-  URL.revokeObjectURL(anchor.href);
-  showToast("Export complete");
+  try {
+    const payload = await api.exportCreators();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = `creators-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
+    showToast("Backup export complete");
+  } catch (error) {
+    console.error("Export Backup failed", { error });
+    showToast(error.message || "Unable to export backup", "error");
+  }
 }
 
 async function importJson(event) {
@@ -724,6 +735,7 @@ async function importJson(event) {
     renderAll();
     showToast("Import successful");
   } catch (error) {
+    console.error("Import Backup failed", { error });
     showToast(error.message || "Invalid JSON file", "error");
   }
 }
@@ -832,12 +844,14 @@ function getCreatorById(creatorId) {
 
 function renderAuth() {
   const userLabel = session.user?.username || "Anonymous";
+  const authSummary = document.getElementById("authSummary");
+  authSummary.hidden = !session.authenticated;
   document.getElementById("authUser").textContent = userLabel;
   document.getElementById("authRole").textContent = session.permissions.roleLabel || session.permissions.role || "Viewer";
   document.getElementById("loginButton").hidden = session.authenticated;
   document.getElementById("logoutButton").hidden = !session.authenticated;
-  document.getElementById("importJson").disabled = !session.permissions.canImportExport;
-  document.getElementById("exportJson").disabled = !session.permissions.canImportExport;
+  document.getElementById("importJson").hidden = !session.permissions.canImportExport;
+  document.getElementById("exportJson").hidden = !session.permissions.canImportExport;
   document.getElementById("createBackup").disabled = !session.permissions.canRestoreBackups;
   document.getElementById("addCreator").hidden = !session.permissions.canEdit;
   document.querySelectorAll(".admin-only").forEach((element) => {
@@ -888,8 +902,24 @@ function updateModalDirtyUi() {
   ];
 
   document.querySelectorAll(saveSelectors.join(",")).forEach((button) => {
-    button.disabled = !modalDirty || modalSaving;
+    button.disabled = !modalDirty || modalSaving || !isModalValid();
   });
+}
+
+function isModalValid() {
+  if (modalMode === "add") {
+    return Boolean(document.querySelector("#addCreatorForm [name='name']")?.value.trim());
+  }
+
+  if (modalMode === "profile") {
+    return Boolean(document.querySelector("#editCreatorForm [name='name']")?.value.trim());
+  }
+
+  if (modalMode === "timeline") {
+    return Boolean(document.getElementById("timelineMessage")?.value.trim());
+  }
+
+  return true;
 }
 
 function setSaveLoading(button, isLoading) {
@@ -899,9 +929,9 @@ function setSaveLoading(button, isLoading) {
     return;
   }
 
-  button.disabled = isLoading || !modalDirty;
+  button.disabled = isLoading || !modalDirty || !isModalValid();
   button.classList.toggle("is-saving", isLoading);
-  button.textContent = isLoading ? "Saving..." : "Save Changes";
+  button.textContent = isLoading ? "Saving..." : button.dataset.defaultText || "Save Changes";
   updateModalDirtyUi();
 }
 
@@ -1018,6 +1048,18 @@ function applySettings(source = settings) {
   document.documentElement.style.setProperty("--sidebar-width", `${source.sidebarWidth || 280}px`);
   document.body.dataset.density = source.density;
   document.body.dataset.sidebar = source.sidebarCollapsed ? "collapsed" : "expanded";
+  updateSidebarToggle(source.sidebarCollapsed);
+}
+
+function updateSidebarToggle(isCollapsed) {
+  const button = document.getElementById("sidebarToggle");
+  if (!button) {
+    return;
+  }
+
+  button.textContent = isCollapsed ? ">>" : "<<";
+  button.title = isCollapsed ? "Expand sidebar" : "Collapse sidebar";
+  button.setAttribute("aria-label", button.title);
 }
 
 function toggleSidebar() {
@@ -1062,7 +1104,19 @@ function handleKeyboardShortcuts(event) {
 
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
     event.preventDefault();
-    exportJson();
+    const modalButton = document.querySelector("[data-save-new-creator], [data-save-profile], [data-save-timeline-entry]");
+    if (modalDirty && modalButton && !modalButton.disabled) {
+      modalButton.click();
+      return;
+    }
+
+    const settingsButton = document.getElementById("saveSettings");
+    if (settingsDirty && settingsButton && !settingsButton.disabled) {
+      settingsButton.click();
+      return;
+    }
+
+    showToast("No unsaved changes.");
     return;
   }
 
@@ -1113,7 +1167,6 @@ function buildColumnTemplate() {
     dmSent: 120,
     quickNote: 220,
     followUpDate: 150,
-    notes: 220,
   };
 
   return Object.keys(defaults)

@@ -19,10 +19,32 @@ async function request(path, options = {}) {
   const payload = contentType.includes("application/json") ? await response.json() : await response.text();
 
   if (!response.ok) {
-    throw new Error(payload?.error || `Request failed: ${response.status}`);
+    const message = normalizeErrorMessage(response.status, payload);
+    console.error("API request failed", {
+      path,
+      method,
+      status: response.status,
+      response: payload,
+    });
+    const error = new Error(message);
+    error.status = response.status;
+    error.path = path;
+    error.method = method;
+    throw error;
   }
 
   return payload;
+}
+
+function normalizeErrorMessage(status, payload) {
+  const serverMessage = payload?.error || "";
+  if (status === 401) {
+    return serverMessage || "Session expired. Please log in again.";
+  }
+  if (status === 403 && /csrf/i.test(serverMessage)) {
+    return "Session expired. Please refresh and try again.";
+  }
+  return serverMessage || `Request failed: ${status}`;
 }
 
 function readCookie(name) {
@@ -40,10 +62,40 @@ export const api = {
   getCreators() {
     return request("/api/creators");
   },
+  createCreator(payload) {
+    return request("/api/creators", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
   updateCreator(creatorId, field, value) {
     return request(`/api/creators/${encodeURIComponent(creatorId)}`, {
       method: "PATCH",
       body: JSON.stringify({ field, value }),
+    });
+  },
+  updateCreatorProfile(creatorId, payload) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}/profile`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  deleteCreator(creatorId, confirmation) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirmation }),
+    });
+  },
+  addTimelineEntry(creatorId, payload) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}/timeline`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  markDmSent(creatorId) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}/mark-dm-sent`, {
+      method: "POST",
+      body: JSON.stringify({}),
     });
   },
   importCreators(payload) {

@@ -6,7 +6,7 @@ export const reminderTemplates = {
   inactivity: {
     label: "Inactivity Check",
     timeline: "Copied inactivity reminder",
-    build: (creator) => `Hey ${creator.name}! 👋
+    build: (creator) => `Hey ${creator.name}!
 
 Hope you've been doing well.
 
@@ -16,9 +16,9 @@ No pressure at all - we completely understand that real life comes first. We jus
 
 Even a quick reply is appreciated, whether you're still interested or taking a break.
 
-Looking forward to hearing from you! ❤
+Looking forward to hearing from you!
 
--# • Lunyxzz | Creator Supervisor`,
+-# Lunyxzz | Creator Supervisor`,
   },
   followup: {
     label: "Follow-up",
@@ -87,11 +87,14 @@ export function openAddCreatorModal() {
         ${renderSelect("status", "Status", "Active", ["Active", "Inactive", "On Break"])}
         ${renderSelect("priority", "Priority", "Medium", ["High", "Medium", "Low"])}
         ${renderInput("category", "Category", "Content Creator")}
+        ${renderInput("quickNote", "Quick Note")}
+        ${renderInput("followUpDate", "Follow-up Date", "", "date")}
         ${renderTextarea("notes", "Notes")}
       </div>
       <div class="button-row modal-actions-row">
         ${renderDirtyBadge()}
-        <button class="button button-primary" data-save-new-creator type="button" disabled>Save Changes</button>
+        <button class="button button-secondary" data-cancel-add-creator type="button">Cancel</button>
+        <button class="button button-primary" data-save-new-creator data-default-text="Create Creator" type="button" disabled>Create Creator</button>
       </div>
     </section>
   `;
@@ -112,10 +115,16 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
         ${renderAvatar(creator, "large")}
         <div>
           <strong>${escapeHtml(creator.channel || creator.discordUsername || creator.robloxUsername || creator.name)}</strong>
-          <span>${escapeHtml(creator.category || creator.platform)}</span>
+          <span>${escapeHtml(creator.platform || "Unknown")} / ${escapeHtml(creator.category || "Creator")}</span>
+          <div class="profile-badges">
+            ${renderBadge(creator.status, creator.status)}
+            ${renderBadge(creator.priority, creator.priority)}
+          </div>
         </div>
       </div>
       ${channelUrl ? `<a class="button button-primary" href="${escapeHtml(channelUrl)}" target="_blank" rel="noreferrer">Open Channel</a>` : ""}
+      <button class="button button-secondary" data-copy-template="${escapeHtml(creator.id)}" type="button">Copy Reminder</button>
+      ${permissions.canEdit ? `<button class="button button-secondary" data-mark-dm-sent="${escapeHtml(creator.id)}" type="button">Mark DM Sent</button>` : ""}
       ${permissions.canEdit ? `<button class="button button-secondary" data-edit-profile="${escapeHtml(creator.id)}" type="button">Edit Profile</button>` : ""}
       ${permissions.canDeleteCreators ? `<button class="button button-danger" data-delete-creator="${escapeHtml(creator.id)}" type="button">Delete Creator</button>` : ""}
     </div>
@@ -123,8 +132,6 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
     <section class="modal-section">
       <h4>General</h4>
       <div class="modal-grid">
-        ${renderReadOnly("Status", renderBadge(creator.status, creator.status))}
-        ${renderReadOnly("Priority", renderBadge(creator.priority, creator.priority))}
         ${renderReadOnly("Quick Note", escapeHtml(formatOptional(creator.quickNote)))}
         ${renderReadOnly("Follow-up", escapeHtml(formatOptional(creator.followUpDate)))}
         ${renderReadOnly("Last Upload", escapeHtml(formatOptional(creator.lastUploadDate)))}
@@ -133,14 +140,12 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
     </section>
 
     <section class="modal-section">
-      <h4>Reminder</h4>
+      <h4>Reminder Template</h4>
       <div class="reminder-tools">
         <label>
           <span>Template</span>
           <select id="reminderTemplate">${renderTemplateOptions()}</select>
         </label>
-        <button class="button button-primary" data-copy-template="${escapeHtml(creator.id)}" type="button">Copy Reminder</button>
-        ${permissions.canEdit ? `<button class="button button-secondary" data-mark-dm-sent="${escapeHtml(creator.id)}" type="button">Mark DM Sent</button>` : ""}
       </div>
     </section>
 
@@ -150,7 +155,7 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
       ${permissions.canEdit ? `
         <div class="button-row modal-actions-row timeline-save-row">
           ${renderDirtyBadge()}
-          <button class="button button-primary" data-save-timeline-entry="${escapeHtml(creator.id)}" type="button" disabled>Save Changes</button>
+          <button class="button button-primary" data-save-timeline-entry="${escapeHtml(creator.id)}" data-default-text="Add Entry" type="button" disabled>Add Entry</button>
         </div>
       ` : ""}
       <div class="activity-list">
@@ -172,10 +177,15 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
         ${renderReadOnly("Discord ID", escapeHtml(formatOptional(creator.discordId)))}
         ${renderReadOnly("Roblox", escapeHtml(formatOptional(creator.robloxUsername)))}
         ${renderReadOnly("Category", escapeHtml(formatOptional(creator.category)))}
+        ${renderReadOnly("YouTube", renderProfileLink(creator.youtubeUrl))}
+        ${renderReadOnly("TikTok", renderProfileLink(creator.tiktokUrl))}
+        ${renderReadOnly("Twitch", renderProfileLink(creator.twitchUrl))}
+        ${renderReadOnly("X/Twitter", renderProfileLink(creator.twitterUrl))}
         ${renderReadOnly("Subscribers", escapeHtml(formatNumber(creator.subscriberCount)))}
         ${renderReadOnly("Views", escapeHtml(formatNumber(creator.views)))}
         ${renderReadOnly("Average Views", escapeHtml(formatNumber(creator.averageViews)))}
         ${renderReadOnly("Latest Video", escapeHtml(formatOptional(creator.latestVideo)))}
+        ${renderReadOnly("Notes", escapeHtml(formatOptional(creator.notes)))}
       </div>
     </section>
   `;
@@ -199,7 +209,7 @@ export function renderEditProfileModal(creator) {
       <div class="button-row modal-actions-row">
         ${renderDirtyBadge()}
         <button class="button button-secondary" data-cancel-profile-edit="${escapeHtml(creator.id)}" type="button">Cancel</button>
-        <button class="button button-primary" data-save-profile="${escapeHtml(creator.id)}" type="button" disabled>Save Changes</button>
+        <button class="button button-primary" data-save-profile="${escapeHtml(creator.id)}" data-default-text="Save Changes" type="button" disabled>Save Changes</button>
       </div>
     </section>
   `;
@@ -302,6 +312,11 @@ function renderReadOnly(label, value) {
       <strong>${value}</strong>
     </div>
   `;
+}
+
+function renderProfileLink(value) {
+  const url = safeUrl(value);
+  return url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a>` : escapeHtml(formatOptional(value));
 }
 
 function renderInput(name, label, value = "", type = "text", required = false) {

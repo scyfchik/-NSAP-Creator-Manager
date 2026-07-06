@@ -67,7 +67,12 @@ Permissions are enforced on the backend. Frontend permissions only control UI vi
 
 - `GET /api/session`
 - `GET /api/creators`
+- `POST /api/creators`
 - `PATCH /api/creators/:id`
+- `PATCH /api/creators/:id/profile`
+- `POST /api/creators/:id/timeline`
+- `POST /api/creators/:id/mark-dm-sent`
+- `DELETE /api/creators/:id`
 - `POST /api/import`
 - `GET /api/export`
 - `GET /api/users`
@@ -78,6 +83,24 @@ Permissions are enforced on the backend. Frontend permissions only control UI vi
 - `POST /api/backups/:id/restore`
 
 Unsafe API requests require the session cookie and CSRF token.
+
+## Daily Creator Workflow
+
+Managers, Administrators, and Owners can add creators from the Creators view with `+ Add Creator`. Creator name is required; Discord, Roblox, platform URLs, status, priority, category, quick note, notes, and follow-up date are optional. The modal keeps entered data if creation fails and shows the server validation message.
+
+Creator profiles can be edited from the creator modal. Read-only profile cards and editable fields are shown separately. Edit mode uses `Save Changes`, `Cancel`, and an unsaved changes badge. Saves are validated on the backend and written to the audit log. Viewers can read data only.
+
+Quick Note is for short working context such as `Waiting for reply`, `On break`, or `Busy with exams`. Manager+ users can edit it inline in the table; it autosaves after a short pause.
+
+Follow-up Date appears in the table, modal, Dashboard cards, Needs Follow-up filter, and Notification Center. Due or overdue dates are highlighted from stored database data only.
+
+Timeline entries are human-friendly creator context, separate from audit logs. Use `Add Entry` in the creator modal for notes like `Sent inactivity check message` or `Creator replied: taking a break`.
+
+Reminder templates are available from the selected creator modal only, so every copied reminder is tied to a real creator. Copying a creator reminder adds a timeline entry for Manager+ users. `Mark DM Sent` must be clicked explicitly; copying a template does not mark DM as sent.
+
+Backup import/export controls live in Settings as `Import Backup` and `Export Backup` for Administrator+ users. Import can overwrite creator data, so use only trusted backup JSON.
+
+The sidebar can be collapsed or resized. Sidebar width and collapsed state are saved in browser localStorage with other UI preferences.
 
 ## Database
 

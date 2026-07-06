@@ -1,4 +1,5 @@
 import { renderAvatar, renderBadge, renderUploadHealth } from "../utils/creatorVisuals.js";
+import { isFollowUpDue } from "../utils/calculations.js";
 import { escapeHtml } from "../utils/format.js";
 
 const columns = [
@@ -9,7 +10,8 @@ const columns = [
   ["days", "Upload Age"],
   ["collabPosted", "Collab"],
   ["dmSent", "DM"],
-  ["notes", "Notes"],
+  ["quickNote", "Quick Note"],
+  ["followUpDate", "Follow-up"],
 ];
 
 const editableSelects = {
@@ -41,12 +43,13 @@ export function renderCreatorsTable({ rows, total, page, maxPage, pageSize, sort
 function renderHeaderCell(field, label, sort) {
   const active = sort.field === field;
   const direction = active ? sort.direction : "asc";
+  const sortIcon = active ? (sort.direction === "desc" ? "&darr;" : "&uarr;") : "";
 
   return `
     <div class="table-cell header-cell ${active ? "sorted" : ""}" role="columnheader">
       <button data-sort="${field}" data-direction="${direction}" type="button">
         ${escapeHtml(label)}
-        <span>${active && sort.direction === "desc" ? "down" : "up"}</span>
+        <span class="sort-icon" aria-hidden="true">${sortIcon}</span>
       </button>
       <span class="column-resizer" data-resize-column="${field}" aria-hidden="true"></span>
     </div>
@@ -69,9 +72,29 @@ function renderRow(creator, permissions) {
       <div class="table-cell">${renderUploadHealth(creator)}</div>
       <div class="table-cell">${renderInlineSelect(creator, "collabPosted", permissions)}</div>
       <div class="table-cell">${renderInlineSelect(creator, "dmSent", permissions)}</div>
-      <div class="table-cell">${renderInlineNotes(creator, permissions)}</div>
+      <div class="table-cell">${renderInlineQuickNote(creator, permissions)}</div>
+      <div class="table-cell">${renderFollowUpDate(creator)}</div>
     </div>
   `;
+}
+
+function renderInlineQuickNote(creator, permissions) {
+  const disabled = permissions?.canEdit ? "" : "disabled";
+  return `
+    <label class="inline-field notes-inline">
+      <span>Quick Note</span>
+      <input data-inline-field="quickNote" data-creator-id="${escapeHtml(creator.id)}" type="text" value="${escapeHtml(creator.quickNote)}" placeholder="Waiting for reply..." ${disabled} />
+    </label>
+  `;
+}
+
+function renderFollowUpDate(creator) {
+  const due = isFollowUpDue(creator.followUpDate);
+  if (!creator.followUpDate) {
+    return `<span class="muted-text">No follow-up</span>`;
+  }
+
+  return `<span class="followup-pill ${due ? "followup-due" : ""}">${escapeHtml(creator.followUpDate)}${due ? " due" : ""}</span>`;
 }
 
 function renderInlineSelect(creator, field, permissions) {
@@ -82,16 +105,6 @@ function renderInlineSelect(creator, field, permissions) {
       <select data-inline-field="${escapeHtml(field)}" data-creator-id="${escapeHtml(creator.id)}" ${disabled}>
         ${editableSelects[field].map((option) => `<option value="${escapeHtml(option)}" ${creator[field] === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
       </select>
-    </label>
-  `;
-}
-
-function renderInlineNotes(creator, permissions) {
-  const disabled = permissions?.canEdit ? "" : "disabled";
-  return `
-    <label class="inline-field notes-inline">
-      <span>Notes</span>
-      <input data-inline-field="notes" data-creator-id="${escapeHtml(creator.id)}" type="text" value="${escapeHtml(creator.notes)}" placeholder="Add note..." ${disabled} />
     </label>
   `;
 }
@@ -120,7 +133,8 @@ function defaultWidth(field) {
     days: 160,
     collabPosted: 130,
     dmSent: 120,
-    notes: 220,
+    quickNote: 220,
+    followUpDate: 150,
   };
 
   return widths[field] || 140;

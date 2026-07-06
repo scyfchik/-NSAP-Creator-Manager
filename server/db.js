@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 const { databasePath, rootDir } = require("./config");
-const { validateCreatorPayload } = require("./validation");
+const { normalizeTimelineEntry, validateCreatorPayload } = require("./validation");
 
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
@@ -15,6 +15,18 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS creators (
       id TEXT PRIMARY KEY,
       payload TEXT NOT NULL,
+      quick_note TEXT,
+      follow_up_date TEXT,
+      deleted INTEGER NOT NULL DEFAULT 0,
+      deleted_at TEXT,
+      discord_username TEXT,
+      discord_id TEXT,
+      roblox_username TEXT,
+      youtube_url TEXT,
+      tiktok_url TEXT,
+      twitch_url TEXT,
+      twitter_url TEXT,
+      category TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -78,6 +90,18 @@ function migrateLegacySchema() {
 
   addColumnIfMissing("audit_logs", "ip", "TEXT");
   addColumnIfMissing("backups", "type", "TEXT NOT NULL DEFAULT 'manual'");
+  addColumnIfMissing("creators", "quick_note", "TEXT");
+  addColumnIfMissing("creators", "follow_up_date", "TEXT");
+  addColumnIfMissing("creators", "deleted", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing("creators", "deleted_at", "TEXT");
+  addColumnIfMissing("creators", "discord_username", "TEXT");
+  addColumnIfMissing("creators", "discord_id", "TEXT");
+  addColumnIfMissing("creators", "roblox_username", "TEXT");
+  addColumnIfMissing("creators", "youtube_url", "TEXT");
+  addColumnIfMissing("creators", "tiktok_url", "TEXT");
+  addColumnIfMissing("creators", "twitch_url", "TEXT");
+  addColumnIfMissing("creators", "twitter_url", "TEXT");
+  addColumnIfMissing("creators", "category", "TEXT");
 
   const userColumns = getColumns("users");
   if (userColumns.length && userColumns.some((column) => column.name === "role")) {
@@ -171,8 +195,15 @@ function seedCreators() {
   replaceCreators(creators, null, "Seeded from data/creators.json", { audit: false, backup: false });
 }
 
-function getCreators() {
-  return db.prepare("SELECT payload FROM creators ORDER BY json_extract(payload, '$.name') COLLATE NOCASE").all()
+function getCreators(options = {}) {
+  const { includeDeleted = false } = options;
+  const where = includeDeleted ? "" : "WHERE deleted = 0";
+  return db.prepare(`
+    SELECT payload
+    FROM creators
+    ${where}
+    ORDER BY json_extract(payload, '$.name') COLLATE NOCASE
+  `).all()
     .map((row) => JSON.parse(row.payload));
 }
 
@@ -183,20 +214,118 @@ function getCreator(id) {
 
 function upsertCreator(creator) {
   db.prepare(`
-    INSERT INTO creators (id, payload, updated_at)
-    VALUES (?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = CURRENT_TIMESTAMP
-  `).run(creator.id, JSON.stringify(creator));
+    INSERT INTO creators (
+      id,
+      payload,
+      quick_note,
+      follow_up_date,
+      deleted,
+      deleted_at,
+      discord_username,
+      discord_id,
+      roblox_username,
+      youtube_url,
+      tiktok_url,
+      twitch_url,
+      twitter_url,
+      category,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET
+      payload = excluded.payload,
+      quick_note = excluded.quick_note,
+      follow_up_date = excluded.follow_up_date,
+      deleted = excluded.deleted,
+      deleted_at = excluded.deleted_at,
+      discord_username = excluded.discord_username,
+      discord_id = excluded.discord_id,
+      roblox_username = excluded.roblox_username,
+      youtube_url = excluded.youtube_url,
+      tiktok_url = excluded.tiktok_url,
+      twitch_url = excluded.twitch_url,
+      twitter_url = excluded.twitter_url,
+      category = excluded.category,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(
+    creator.id,
+    JSON.stringify(creator),
+    creator.quickNote || null,
+    creator.followUpDate || null,
+    creator.deleted ? 1 : 0,
+    creator.deletedAt || null,
+    creator.discordUsername || null,
+    creator.discordId || null,
+    creator.robloxUsername || null,
+    creator.youtubeUrl || null,
+    creator.tiktokUrl || null,
+    creator.twitchUrl || null,
+    creator.twitterUrl || null,
+    creator.category || null,
+  );
+}
+
+function createCreator(creator, user, ip) {
+  assertCreatorIsUnique(creator);
+
+  const safeCreator = {
+    ...creator,
+    id: getAvailableCreatorId(creator.id),
+    createdAt: creator.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    deleted: false,
+  };
+
+  upsertCreator(safeCreator);
+  insertAudit({
+    user,
+    action: "creator.create",
+    creatorId: safeCreator.id,
+    field: null,
+    oldValue: null,
+    newValue: safeCreator.name,
+    ip,
+  });
+
+  return safeCreator;
+}
+
+function assertCreatorIsUnique(creator) {
+  const duplicate = getCreators().find((item) => {
+    const sameName = normalizeDuplicateValue(item.name) === normalizeDuplicateValue(creator.name);
+    const sameChannel = creator.channel && normalizeDuplicateValue(item.channel) === normalizeDuplicateValue(creator.channel);
+    const sameDiscord = creator.discordId && item.discordId === creator.discordId;
+    return sameName || sameChannel || sameDiscord;
+  });
+
+  if (!duplicate) {
+    return;
+  }
+
+  const error = new Error("A creator with this name, channel, or Discord ID already exists.");
+  error.status = 409;
+  throw error;
+}
+
+function normalizeDuplicateValue(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function updateCreatorField({ creatorId, field, value, user, ip }) {
   const creator = getCreator(creatorId);
-  if (!creator) {
+  if (!creator || creator.deleted) {
     return null;
   }
 
   const oldValue = creator[field] ?? "";
+  if (oldValue === value) {
+    return creator;
+  }
+
   creator[field] = value;
+  if (field === "followUpDate") {
+    creator.followUp = value ? "Yes" : "No";
+  }
   creator.history = Array.isArray(creator.history) ? creator.history : [];
   creator.history.unshift({
     type: getHistoryType(field, value),
@@ -212,6 +341,134 @@ function updateCreatorField({ creatorId, field, value, user, ip }) {
     field,
     oldValue,
     newValue: value,
+    ip,
+  });
+
+  return creator;
+}
+
+function updateCreatorProfile({ creatorId, updates, user, ip }) {
+  const creator = getCreator(creatorId);
+  if (!creator || creator.deleted) {
+    return null;
+  }
+
+  const oldValues = {};
+  const newValues = {};
+  Object.entries(updates).forEach(([field, value]) => {
+    if (creator[field] !== value) {
+      oldValues[field] = creator[field] ?? "";
+      newValues[field] = value;
+      creator[field] = value;
+    }
+  });
+
+  if (!Object.keys(newValues).length) {
+    return creator;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(newValues, "followUpDate")) {
+    creator.followUp = creator.followUpDate ? "Yes" : "No";
+    appendTimeline(creator, normalizeTimelineEntry({
+      type: "followup_set",
+      message: creator.followUpDate ? `Set follow-up for ${creator.followUpDate}.` : "Cleared follow-up date.",
+    }, user));
+  }
+
+  creator.updatedAt = new Date().toISOString();
+  creator.history = Array.isArray(creator.history) ? creator.history : [];
+  creator.history.unshift({
+    type: "Profile Updated",
+    date: new Date().toISOString().slice(0, 10),
+    note: `${Object.keys(newValues).join(", ")} updated.`,
+  });
+
+  upsertCreator(creator);
+  insertAudit({
+    user,
+    action: "creator.profile.update",
+    creatorId,
+    field: "profile",
+    oldValue: oldValues,
+    newValue: newValues,
+    ip,
+  });
+
+  return creator;
+}
+
+function softDeleteCreator({ creatorId, user, ip }) {
+  const creator = getCreator(creatorId);
+  if (!creator || creator.deleted) {
+    return null;
+  }
+
+  creator.deleted = true;
+  creator.deletedAt = new Date().toISOString();
+  creator.status = "Inactive";
+  creator.updatedAt = creator.deletedAt;
+  appendTimeline(creator, normalizeTimelineEntry({
+    type: "custom",
+    message: "Creator deleted from active workspace.",
+  }, user));
+  upsertCreator(creator);
+  insertAudit({
+    user,
+    action: "creator.delete",
+    creatorId,
+    field: "deleted",
+    oldValue: false,
+    newValue: true,
+    ip,
+  });
+
+  return creator;
+}
+
+function addTimelineEntry({ creatorId, entry, user, ip, auditAction = "creator.timeline.add" }) {
+  const creator = getCreator(creatorId);
+  if (!creator || creator.deleted) {
+    return null;
+  }
+
+  const timelineEntry = normalizeTimelineEntry(entry, user);
+  appendTimeline(creator, timelineEntry);
+  creator.updatedAt = new Date().toISOString();
+  upsertCreator(creator);
+  insertAudit({
+    user,
+    action: auditAction,
+    creatorId,
+    field: "timeline",
+    oldValue: null,
+    newValue: timelineEntry,
+    ip,
+  });
+
+  return creator;
+}
+
+function markDmSent({ creatorId, user, ip }) {
+  const creator = getCreator(creatorId);
+  if (!creator || creator.deleted) {
+    return null;
+  }
+
+  const oldValue = creator.dmSent || "No";
+  creator.dmSent = "Yes";
+  creator.updatedAt = new Date().toISOString();
+  appendTimeline(creator, normalizeTimelineEntry({
+    type: "reminder_sent",
+    message: "Marked DM sent.",
+  }, user));
+  upsertCreator(creator);
+  insertAudit({
+    user,
+    action: "creator.dm.mark_sent",
+    creatorId,
+    field: "dmSent",
+    oldValue,
+    newValue: "Yes",
     ip,
   });
 
@@ -435,6 +692,8 @@ function getHistoryType(field, value) {
     dmSent: value === "Yes" ? "Reminder Sent" : "DM Updated",
     collabPosted: value === "Yes" ? "Collab Posted" : "Collab Updated",
     notes: "Notes Updated",
+    quickNote: "Quick Note Updated",
+    followUpDate: "Follow-up Date Updated",
     lastContent: "Content Updated",
     lastUploadDate: "Upload Date Updated",
     followUp: "Follow-up Updated",
@@ -445,7 +704,25 @@ function getHistoryType(field, value) {
   return types[field] || "Creator Updated";
 }
 
+function appendTimeline(creator, entry) {
+  creator.timeline = Array.isArray(creator.timeline) ? creator.timeline : [];
+  creator.timeline.unshift(entry);
+}
+
+function getAvailableCreatorId(baseId) {
+  const base = baseId || "creator";
+  let candidate = base;
+  let suffix = 2;
+  while (getCreator(candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
 module.exports = {
+  addTimelineEntry,
+  createCreator,
   createSession,
   deleteSession,
   getAuditLog,
@@ -460,6 +737,9 @@ module.exports = {
   insertAudit,
   replaceCreators,
   restoreBackup,
+  markDmSent,
+  softDeleteCreator,
+  updateCreatorProfile,
   updateCreatorField,
   updateUserRole,
   upsertUser,

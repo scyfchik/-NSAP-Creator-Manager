@@ -16,48 +16,35 @@
           <h1>NSAP</h1>
           <p>Creator Manager</p>
         </div>
-        <button class="icon-button sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle sidebar">≡</button>
+        <button class="icon-button sidebar-toggle" id="sidebarToggle" type="button" aria-label="Collapse sidebar" title="Collapse sidebar"><<</button>
       </div>
 
       <nav class="nav-list" aria-label="Primary">
-        <button class="nav-item active" data-view="dashboard" type="button">
+        <button class="nav-item active" data-view="dashboard" type="button" title="Dashboard">
           <span class="nav-icon">D</span>
           Dashboard
         </button>
-        <button class="nav-item" data-view="creators" type="button">
+        <button class="nav-item" data-view="creators" type="button" title="Creators">
           <span class="nav-icon">C</span>
           Creators
         </button>
-        <button class="nav-item" data-filter-shortcut="followUp" type="button">
+        <button class="nav-item" data-filter-shortcut="followUp" type="button" title="Needs Follow-up">
           <span class="nav-icon">F</span>
           Needs Follow-up
         </button>
-        <button class="nav-item" data-filter-shortcut="collabMissing" type="button">
+        <button class="nav-item" data-filter-shortcut="collabMissing" type="button" title="Collab Missing">
           <span class="nav-icon">M</span>
           Collab Missing
         </button>
-        <button class="nav-item" data-view="settings" type="button">
+        <button class="nav-item" data-view="settings" type="button" title="Settings">
           <span class="nav-icon">S</span>
           Settings
         </button>
-        <button class="nav-item admin-only" data-view="admin" type="button" hidden>
+        <button class="nav-item admin-only" data-view="admin" type="button" title="Admin" hidden>
           <span class="nav-icon">A</span>
           Admin
         </button>
       </nav>
-
-      <div class="sidebar-panel">
-        <span>Quick reminder</span>
-        <select id="globalReminderTemplate" aria-label="Reminder template">
-          <option value="inactivity">Inactivity Check</option>
-          <option value="followup">Follow-up</option>
-          <option value="collab">Collab Reminder</option>
-          <option value="update">Big Update Reminder</option>
-          <option value="thanks">Thank You</option>
-          <option value="welcome">Welcome Creator</option>
-        </select>
-        <button class="button button-primary" id="copyReminder" type="button">Copy DM Template</button>
-      </div>
       <span class="sidebar-resizer" id="sidebarResizer" aria-hidden="true"></span>
     </aside>
 
@@ -78,9 +65,6 @@
             <span>Search</span>
             <input id="searchInput" type="search" placeholder="Name, channel, platform, status, notes..." autocomplete="off" />
           </label>
-          <input id="importJsonInput" type="file" accept="application/json,.json" hidden />
-          <button class="button button-secondary" id="importJson" type="button">Import JSON</button>
-          <button class="button button-secondary" id="exportJson" type="button">Export JSON</button>
           <button class="button button-secondary" id="undoEdit" type="button" disabled>Undo</button>
         </div>
       </header>
@@ -206,9 +190,12 @@
               <h4>Data Source</h4>
             </div>
             <div class="settings-copy" id="dataSourceSummary"></div>
+            <p class="settings-copy">Backup import can replace creator data. Use it only with a trusted exported backup.</p>
             <div class="button-row">
               <button class="button button-secondary" id="resetLocalData" type="button">Refresh Database Data</button>
-              <button class="button button-primary" id="copyReminderSettings" type="button">Copy Reminder</button>
+              <input id="importJsonInput" type="file" accept="application/json,.json" hidden />
+              <button class="button button-secondary" id="importJson" type="button" hidden>Import Backup</button>
+              <button class="button button-secondary" id="exportJson" type="button" hidden>Export Backup</button>
             </div>
           </section>
 
@@ -289,7 +276,7 @@
           <p class="eyebrow">Creator profile</p>
           <h3 id="modalName"></h3>
         </div>
-        <button class="icon-button" id="closeDialog" type="button" aria-label="Close">x</button>
+        <button class="icon-button dialog-close" id="closeDialog" type="button" aria-label="Close" title="Close">X</button>
       </div>
       <div id="modalBody"></div>
     </form>

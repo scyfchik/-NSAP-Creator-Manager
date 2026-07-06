@@ -99,6 +99,8 @@ p {
 
 .sidebar-toggle {
   margin-left: auto;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .logo,
@@ -175,7 +177,6 @@ body[data-sidebar="collapsed"] .sidebar {
 
 body[data-sidebar="collapsed"] .brand > div:not(.logo),
 body[data-sidebar="collapsed"] .nav-item > span + text,
-body[data-sidebar="collapsed"] .sidebar-panel,
 body[data-sidebar="collapsed"] .nav-item {
   overflow: hidden;
 }
@@ -193,6 +194,10 @@ body[data-sidebar="collapsed"] .nav-item {
 
 body[data-sidebar="collapsed"] .nav-icon {
   font-size: 12px;
+}
+
+body[data-sidebar="collapsed"] .sidebar-toggle {
+  margin: 0 auto 0 0;
 }
 
 .nav-item:hover,
@@ -214,7 +219,6 @@ body[data-sidebar="collapsed"] .nav-icon {
   font-weight: 900;
 }
 
-.sidebar-panel,
 .panel,
 .data-card,
 .stat-card {
@@ -222,14 +226,6 @@ body[data-sidebar="collapsed"] .nav-icon {
   background: var(--glass);
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
-}
-
-.sidebar-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 28px;
-  padding: 16px;
-  border-radius: 8px;
 }
 
 .main-shell {
@@ -248,6 +244,7 @@ body[data-sidebar="collapsed"] .nav-icon {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .topbar {
@@ -601,7 +598,7 @@ button:disabled {
 .table-header,
 .table-row {
   display: grid;
-  grid-template-columns: var(--creator-columns, 260px 130px 150px 140px 160px 130px 120px 220px);
+  grid-template-columns: var(--creator-columns, 260px 120px 132px 126px 150px 110px 105px 210px 140px);
   min-width: max-content;
 }
 
@@ -629,8 +626,8 @@ button:disabled {
 .table-cell {
   display: flex;
   align-items: center;
-  min-height: 66px;
-  padding: 12px;
+  min-height: 60px;
+  padding: 10px 12px;
 }
 
 .header-cell {
@@ -658,6 +655,14 @@ button:disabled {
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.sort-icon {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 16px;
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .column-resizer {
@@ -906,6 +911,12 @@ button:disabled {
   background: rgba(255, 255, 255, 0.055);
 }
 
+.icon-button:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.09);
+}
+
 .modal-summary {
   align-items: center;
   padding: 18px 20px;
@@ -922,6 +933,13 @@ button:disabled {
 .profile-chip strong,
 .profile-chip span {
   display: block;
+}
+
+.profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .modal-grid,
@@ -956,6 +974,10 @@ button:disabled {
   grid-template-columns: minmax(180px, 1fr) auto auto;
   gap: 12px;
   align-items: end;
+}
+
+.reminder-tools {
+  grid-template-columns: minmax(180px, 360px);
 }
 
 .timeline-composer {
@@ -1109,8 +1131,7 @@ body[data-density="compact"] .stat-card {
   padding: 14px;
 }
 
-body[data-density="compact"] .panel,
-body[data-density="compact"] .sidebar-panel {
+body[data-density="compact"] .panel {
   padding: 14px;
 }
 
