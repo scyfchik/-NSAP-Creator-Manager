@@ -1,0 +1,23 @@
+{
+  "name": "nsap-creator-manager",
+  "version": "1.2.0",
+  "private": true,
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "build": "node --check server/server.js && node --check server/app.js && node --check server/auth.js && node --check server/db.js && node --check server/security.js && node --check server/validation.js",
+    "check": "node --check server/server.js && node --check server/app.js && node --check server/auth.js && node --check server/db.js && node --check server/security.js && node --check server/validation.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "compression": "1.8.1",
+    "cookie-parser": "1.4.7",
+    "cors": "2.8.6",
+    "express": "4.22.2",
+    "express-rate-limit": "7.5.1",
+    "helmet": "7.2.0",
+    "morgan": "1.11.0"
+  }
+}
