@@ -1,5 +1,15 @@
 import { daysSinceUpload } from "./dates.js";
 
+export function isFollowUpDue(dateValue, now = new Date()) {
+  const followUpDate = parseLocalDate(dateValue);
+  if (!followUpDate) {
+    return false;
+  }
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return followUpDate <= today;
+}
+
 export function getCreatorStats(creators) {
   const uploadAges = creators
     .map((creator) => daysSinceUpload(creator.lastUploadDate))
@@ -37,4 +47,46 @@ export function getPlatformDistribution(creators) {
 export function getOptions(creators, field) {
   return [...new Set(creators.map((creator) => creator[field]).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b));
+}
+
+function parseLocalDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return null;
+    }
+
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  const dateText = String(value).trim();
+  if (!dateText) {
+    return null;
+  }
+
+  const dateOnly = dateText.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly.map(Number);
+    const localDate = new Date(year, month - 1, day);
+
+    if (
+      localDate.getFullYear() !== year ||
+      localDate.getMonth() !== month - 1 ||
+      localDate.getDate() !== day
+    ) {
+      return null;
+    }
+
+    return localDate;
+  }
+
+  const parsed = new Date(dateText);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 }
