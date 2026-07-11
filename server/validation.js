@@ -30,6 +30,8 @@ const profileFields = new Set([
   "quickNote",
   "followUpDate",
   "lastUploadDate",
+  "collabPosted",
+  "dmSent",
 ]);
 
 const fieldValidators = {
@@ -281,6 +283,13 @@ function sanitizeProfileValue(field, value) {
   if (field === "priority") {
     if (!["High", "Medium", "Low"].includes(value)) {
       throwRequestError("Invalid value for priority.", 400);
+    }
+    return value;
+  }
+
+  if (field === "collabPosted" || field === "dmSent") {
+    if (!["Yes", "No"].includes(value)) {
+      throwRequestError(`Invalid value for ${field}.`, 400);
     }
     return value;
   }

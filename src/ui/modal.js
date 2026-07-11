@@ -93,7 +93,6 @@ export function openAddCreatorModal() {
         ${renderTextarea("notes", "Notes")}
       </div>
       <div class="button-row modal-actions-row">
-        ${renderDirtyBadge()}
         <button class="button button-secondary" data-cancel-add-creator type="button">Cancel</button>
         <button class="button button-primary" data-save-new-creator data-default-text="Create Creator" type="button" disabled>Create Creator</button>
       </div>
@@ -107,40 +106,66 @@ export function openAddCreatorModal() {
 
 export function renderCreatorDetails(creator, permissions = { canEdit: false }) {
   const days = daysSinceUpload(creator.lastUploadDate);
-  const channelUrl = safeUrl(creator.url || creator.youtubeUrl || creator.tiktokUrl || creator.twitchUrl || creator.twitterUrl);
+  const channelUrl = getPrimaryChannelUrl(creator);
+  const contactItems = renderContactItems(creator);
+  const metricItems = renderMetricItems(creator);
 
   document.getElementById("modalName").textContent = creator.name;
   document.getElementById("modalBody").innerHTML = `
-    <div class="modal-summary">
+    <div class="modal-summary profile-summary">
       <div class="profile-chip">
         ${renderAvatar(creator, "large")}
         <div>
-          <strong>${escapeHtml(creator.channel || creator.discordUsername || creator.robloxUsername || creator.name)}</strong>
-          <span>${escapeHtml(creator.platform || "Unknown")} / ${escapeHtml(creator.category || "Creator")}</span>
+          <strong>${escapeHtml(creator.name)}</strong>
+          ${creator.discordUsername ? `<span>${escapeHtml(creator.discordUsername)}</span>` : ""}
+          <span>${escapeHtml([creator.platform || "Unknown", creator.category].filter(Boolean).join(" / "))}</span>
           <div class="profile-badges">
             ${renderBadge(creator.status, creator.status)}
             ${renderBadge(creator.priority, creator.priority)}
           </div>
         </div>
       </div>
-      ${channelUrl ? `<a class="button button-primary" href="${escapeHtml(channelUrl)}" target="_blank" rel="noreferrer">Open Channel</a>` : ""}
-      <button class="button button-secondary" data-copy-template="${escapeHtml(creator.id)}" type="button">Copy Reminder</button>
-      ${permissions.canEdit ? `<button class="button button-secondary" data-mark-dm-sent="${escapeHtml(creator.id)}" type="button">Mark DM Sent</button>` : ""}
-      ${permissions.canEdit ? `<button class="button button-secondary" data-edit-profile="${escapeHtml(creator.id)}" type="button">Edit Profile</button>` : ""}
-      ${permissions.canDeleteCreators ? `<button class="button button-danger" data-delete-creator="${escapeHtml(creator.id)}" type="button">Delete Creator</button>` : ""}
+      <div class="profile-actions">
+        ${channelUrl ? `<a class="button button-primary" href="${escapeHtml(channelUrl)}" target="_blank" rel="noreferrer">Open Channel</a>` : `<button class="button button-secondary" type="button" disabled>No Channel</button>`}
+        <button class="button button-secondary" data-copy-template="${escapeHtml(creator.id)}" type="button">Copy Reminder</button>
+        ${permissions.canEdit ? `<button class="button button-secondary" data-mark-dm-sent="${escapeHtml(creator.id)}" type="button">Mark DM Sent</button>` : ""}
+        ${permissions.canEdit ? `<button class="button button-secondary" data-edit-profile="${escapeHtml(creator.id)}" type="button">Edit Profile</button>` : ""}
+        ${permissions.canDeleteCreators ? `<button class="button button-danger" data-delete-creator="${escapeHtml(creator.id)}" type="button">Delete Creator</button>` : ""}
+      </div>
     </div>
 
-    <section class="modal-section">
-      <h4>General</h4>
-      <div class="modal-grid">
-        ${renderReadOnly("Quick Note", escapeHtml(formatOptional(creator.quickNote)))}
-        ${renderReadOnly("Follow-up", escapeHtml(formatOptional(creator.followUpDate)))}
-        ${renderReadOnly("Last Upload", escapeHtml(formatOptional(creator.lastUploadDate)))}
+    <div class="profile-content-grid">
+      <section class="modal-section profile-section">
+        <h4>Overview</h4>
+        <div class="modal-grid overview-grid">
+        ${renderReadOnly("Quick Note", escapeHtml(formatOptional(creator.quickNote, "No quick note.")))}
+        ${renderReadOnly("Follow-up", escapeHtml(formatOptional(creator.followUpDate, "No follow-up scheduled.")))}
+        ${renderReadOnly("Last Upload", escapeHtml(formatOptional(creator.lastUploadDate, "No upload date.")))}
         ${renderReadOnly("Upload Health", `<b class="age age-${uploadAgeTone(days)}">${escapeHtml(uploadAgeLabel(days))}</b>`)}
-      </div>
+        ${renderReadOnly("Collaboration", escapeHtml(creator.collabPosted === "Yes" ? "Posted" : "Not posted"))}
+        ${renderReadOnly("DM Status", escapeHtml(creator.dmSent === "Yes" ? "Sent" : "Not sent"))}
+        </div>
+      </section>
+
+      <section class="modal-section profile-section">
+        <h4>Contact &amp; Channels</h4>
+        ${contactItems ? `<div class="compact-detail-list">${contactItems}</div>` : `<p class="empty-state compact-empty">No social channels added.</p>`}
+      </section>
+    </div>
+
+    <section class="modal-section profile-section">
+      <h4>Notes</h4>
+      <div class="profile-notes">${creator.notes ? escapeHtml(creator.notes) : `<span>No notes added.</span>`}</div>
     </section>
 
-    <section class="modal-section">
+    ${metricItems ? `
+      <section class="modal-section profile-section additional-metrics">
+        <h4>Additional Metrics</h4>
+        <div class="compact-detail-list">${metricItems}</div>
+      </section>
+    ` : ""}
+
+    <section class="modal-section profile-section">
       <h4>Reminder Template</h4>
       <div class="reminder-tools">
         <label>
@@ -150,12 +175,11 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
       </div>
     </section>
 
-    <section class="modal-section">
+    <section class="modal-section profile-section">
       <h4>Timeline</h4>
       ${permissions.canEdit ? renderTimelineComposer() : ""}
       ${permissions.canEdit ? `
         <div class="button-row modal-actions-row timeline-save-row">
-          ${renderDirtyBadge()}
           <button class="button button-primary" data-save-timeline-entry="${escapeHtml(creator.id)}" data-default-text="Add Entry" type="button" disabled>Add Entry</button>
         </div>
       ` : ""}
@@ -164,31 +188,13 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
       </div>
     </section>
 
-    <section class="modal-section">
+    <section class="modal-section profile-section activity-section">
       <h4>Activity</h4>
       <div class="activity-list">
         ${renderHistory(creator.history)}
       </div>
     </section>
 
-    <section class="modal-section">
-      <h4>Profile</h4>
-      <div class="modal-grid">
-        ${renderReadOnly("Discord", escapeHtml(formatOptional(creator.discordUsername)))}
-        ${renderReadOnly("Discord ID", escapeHtml(formatOptional(creator.discordId)))}
-        ${renderReadOnly("Roblox", escapeHtml(formatOptional(creator.robloxUsername)))}
-        ${renderReadOnly("Category", escapeHtml(formatOptional(creator.category)))}
-        ${renderReadOnly("YouTube", renderProfileLink(creator.youtubeUrl))}
-        ${renderReadOnly("TikTok", renderProfileLink(creator.tiktokUrl))}
-        ${renderReadOnly("Twitch", renderProfileLink(creator.twitchUrl))}
-        ${renderReadOnly("X/Twitter", renderProfileLink(creator.twitterUrl))}
-        ${renderReadOnly("Subscribers", escapeHtml(formatNumber(creator.subscriberCount)))}
-        ${renderReadOnly("Views", escapeHtml(formatNumber(creator.views)))}
-        ${renderReadOnly("Average Views", escapeHtml(formatNumber(creator.averageViews)))}
-        ${renderReadOnly("Latest Video", escapeHtml(formatOptional(creator.latestVideo)))}
-        ${renderReadOnly("Notes", escapeHtml(formatOptional(creator.notes)))}
-      </div>
-    </section>
   `;
 }
 
@@ -206,9 +212,10 @@ export function renderEditProfileModal(creator) {
         }).join("")}
         ${renderSelect("status", "Status", creator.status, ["Active", "Inactive", "On Break"])}
         ${renderSelect("priority", "Priority", creator.priority, ["High", "Medium", "Low"])}
+        ${renderSelect("collabPosted", "Collaboration Status", creator.collabPosted, ["Yes", "No"])}
+        ${renderSelect("dmSent", "DM Status", creator.dmSent, ["Yes", "No"])}
       </div>
       <div class="button-row modal-actions-row">
-        ${renderDirtyBadge()}
         <button class="button button-secondary" data-cancel-profile-edit="${escapeHtml(creator.id)}" type="button">Cancel</button>
         <button class="button button-primary" data-save-profile="${escapeHtml(creator.id)}" data-default-text="Save Changes" type="button" disabled>Save Changes</button>
       </div>
@@ -269,10 +276,6 @@ function renderTimelineComposer() {
   `;
 }
 
-function renderDirtyBadge() {
-  return `<span class="dirty-badge" data-dirty-badge hidden>Unsaved changes</span>`;
-}
-
 function renderTimeline(creator) {
   const timeline = Array.isArray(creator.timeline) ? creator.timeline : [];
   if (!timeline.length) {
@@ -315,9 +318,67 @@ function renderReadOnly(label, value) {
   `;
 }
 
-function renderProfileLink(value) {
+function renderContactItems(creator) {
+  const explicitUrls = [creator.youtubeUrl, creator.tiktokUrl, creator.twitchUrl, creator.twitterUrl]
+    .map((value) => safeUrl(value))
+    .filter(Boolean);
+  const legacyChannel = getPlatformUrl(creator.url, ["youtube.com", "youtu.be", "tiktok.com", "twitch.tv", "x.com", "twitter.com"]);
+  return [
+    creator.discordUsername ? renderCompactDetail("Discord", escapeHtml(creator.discordUsername)) : "",
+    creator.robloxUsername ? renderCompactDetail("Roblox", escapeHtml(creator.robloxUsername)) : "",
+    renderSocialDetail("YouTube", creator.youtubeUrl, ["youtube.com", "youtu.be"]),
+    renderSocialDetail("TikTok", creator.tiktokUrl, ["tiktok.com"]),
+    renderSocialDetail("Twitch", creator.twitchUrl, ["twitch.tv"]),
+    renderSocialDetail("X / Twitter", creator.twitterUrl, ["x.com", "twitter.com"]),
+    legacyChannel && !explicitUrls.includes(legacyChannel) ? renderCompactDetail("Primary Channel", `<a href="${escapeHtml(legacyChannel)}" target="_blank" rel="noreferrer">${escapeHtml(legacyChannel)}</a>`) : "",
+  ].filter(Boolean).join("");
+}
+
+function renderMetricItems(creator) {
+  return [
+    Number.isFinite(creator.subscriberCount) ? renderCompactDetail("Subscribers", escapeHtml(formatNumber(creator.subscriberCount))) : "",
+    Number.isFinite(creator.views) ? renderCompactDetail("Views", escapeHtml(formatNumber(creator.views))) : "",
+    Number.isFinite(creator.averageViews) ? renderCompactDetail("Average Views", escapeHtml(formatNumber(creator.averageViews))) : "",
+    creator.latestVideo ? renderCompactDetail("Latest Video", escapeHtml(creator.latestVideo)) : "",
+  ].filter(Boolean).join("");
+}
+
+function renderSocialDetail(label, value, hosts) {
+  const url = getPlatformUrl(value, hosts);
+  return url ? renderCompactDetail(label, `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a>`) : "";
+}
+
+function renderCompactDetail(label, value) {
+  return `<div class="compact-detail"><span>${escapeHtml(label)}</span><strong>${value}</strong></div>`;
+}
+
+function getPrimaryChannelUrl(creator) {
+  const platformCandidates = {
+    YouTube: [[creator.youtubeUrl, ["youtube.com", "youtu.be"]]],
+    TikTok: [[creator.tiktokUrl, ["tiktok.com"]]],
+    Twitch: [[creator.twitchUrl, ["twitch.tv"]]],
+    "X/Twitter": [[creator.twitterUrl, ["x.com", "twitter.com"]]],
+  };
+  const candidates = [
+    ...(platformCandidates[creator.platform] || []),
+    [creator.youtubeUrl, ["youtube.com", "youtu.be"]],
+    [creator.tiktokUrl, ["tiktok.com"]],
+    [creator.twitchUrl, ["twitch.tv"]],
+    [creator.twitterUrl, ["x.com", "twitter.com"]],
+    [creator.url, ["youtube.com", "youtu.be", "tiktok.com", "twitch.tv", "x.com", "twitter.com"]],
+  ];
+  for (const [value, hosts] of candidates) {
+    const url = getPlatformUrl(value, hosts);
+    if (url) return url;
+  }
+  return "";
+}
+
+function getPlatformUrl(value, hosts) {
   const url = safeUrl(value);
-  return url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a>` : escapeHtml(formatOptional(value));
+  if (!url) return "";
+  const hostname = new URL(url).hostname.toLowerCase();
+  return hosts.some((host) => hostname === host || hostname.endsWith(`.${host}`)) ? url : "";
 }
 
 function renderInput(name, label, value = "", type = "text", required = false) {

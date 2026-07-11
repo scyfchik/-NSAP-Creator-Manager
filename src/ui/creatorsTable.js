@@ -21,7 +21,7 @@ const editableSelects = {
   dmSent: ["Yes", "No"],
 };
 
-export function renderCreatorsTable({ rows, total, page, maxPage, pageSize, sort, columnWidths, permissions }) {
+export function renderCreatorsTable({ rows, total, page, maxPage, pageSize, sort, columnWidths, permissions, quickNoteDrafts, quickNoteSaveStates }) {
   document.getElementById("resultCount").textContent = `${total} creator${total === 1 ? "" : "s"} found`;
   document.getElementById("pageIndicator").textContent = `Page ${page} of ${maxPage}`;
   document.getElementById("prevPage").disabled = page <= 1;
@@ -35,7 +35,7 @@ export function renderCreatorsTable({ rows, total, page, maxPage, pageSize, sort
       ${columns.map(([field, label]) => renderHeaderCell(field, label, sort)).join("")}
     </div>
     <div class="table-body">
-      ${rows.length ? rows.map((row) => renderRow(row, permissions)).join("") : renderEmptyRow()}
+      ${rows.length ? rows.map((row) => renderRow(row, permissions, quickNoteDrafts, quickNoteSaveStates)).join("") : renderEmptyRow()}
     </div>
   `;
 }
@@ -56,7 +56,7 @@ function renderHeaderCell(field, label, sort) {
   `;
 }
 
-function renderRow(creator, permissions) {
+function renderRow(creator, permissions, quickNoteDrafts, quickNoteSaveStates) {
   return `
     <div class="table-row" data-open-creator="${escapeHtml(creator.id)}" role="row">
       <button class="table-cell creator-cell row-open-cell" data-open-creator="${escapeHtml(creator.id)}" type="button">
@@ -72,18 +72,21 @@ function renderRow(creator, permissions) {
       <div class="table-cell">${renderUploadHealth(creator)}</div>
       <div class="table-cell">${renderInlineSelect(creator, "collabPosted", permissions)}</div>
       <div class="table-cell">${renderInlineSelect(creator, "dmSent", permissions)}</div>
-      <div class="table-cell">${renderInlineQuickNote(creator, permissions)}</div>
+      <div class="table-cell">${renderInlineQuickNote(creator, permissions, quickNoteDrafts, quickNoteSaveStates)}</div>
       <div class="table-cell">${renderFollowUpDate(creator)}</div>
     </div>
   `;
 }
 
-function renderInlineQuickNote(creator, permissions) {
+function renderInlineQuickNote(creator, permissions, quickNoteDrafts, quickNoteSaveStates) {
   const disabled = permissions?.canEdit ? "" : "disabled";
+  const value = quickNoteDrafts?.get(creator.id) ?? creator.quickNote;
+  const saveState = quickNoteSaveStates?.get(creator.id);
   return `
     <label class="inline-field notes-inline">
       <span>Quick Note</span>
-      <input data-inline-field="quickNote" data-creator-id="${escapeHtml(creator.id)}" type="text" value="${escapeHtml(creator.quickNote)}" placeholder="Waiting for reply..." ${disabled} />
+      <input data-inline-field="quickNote" data-creator-id="${escapeHtml(creator.id)}" type="text" value="${escapeHtml(value)}" placeholder="Waiting for reply..." ${disabled} />
+      <small class="field-save-status state-${escapeHtml(saveState?.state || "idle")}" data-quick-note-state="${escapeHtml(creator.id)}" ${saveState ? "" : "hidden"}>${escapeHtml(saveState?.label || "")}</small>
     </label>
   `;
 }

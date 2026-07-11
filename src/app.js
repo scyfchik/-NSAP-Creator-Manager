@@ -55,12 +55,19 @@ let settings = loadSettings(defaultSettings);
 let settingsDraft = { ...settings };
 let undoStack = [];
 let quickNoteTimers = new Map();
+let quickNoteDrafts = new Map();
+let quickNoteSaveStates = new Map();
+let quickNoteSaveVersions = new Map();
+let quickNoteFadeTimers = new Map();
+let pendingSaveRequests = 0;
 let searchTimer = 0;
 let modalDirty = false;
 let modalMode = "";
 let modalInitialSnapshot = "";
 let modalSaving = false;
 let settingsDirty = false;
+let settingsSaving = false;
+let modalSaveStateTimer = 0;
 let session = {
   authenticated: false,
   user: null,
@@ -247,6 +254,8 @@ function renderCreators() {
     sort: state.sort,
     columnWidths: state.columnWidths,
     permissions: session.permissions,
+    quickNoteDrafts,
+    quickNoteSaveStates,
   });
 
   renderFilterOptions(creators, state);
@@ -453,10 +462,12 @@ function handleInlineInput(event) {
   }
 
   const creatorId = control.dataset.creatorId;
+  quickNoteDrafts.set(creatorId, control.value);
+  setQuickNoteSaveState(creatorId, "unsaved", "Unsaved changes");
   window.clearTimeout(quickNoteTimers.get(creatorId));
   quickNoteTimers.set(creatorId, window.setTimeout(() => {
-    updateCreatorField(creatorId, "quickNote", control.value, "table");
     quickNoteTimers.delete(creatorId);
+    saveQuickNote(creatorId);
   }, 650));
 }
 
@@ -469,7 +480,66 @@ function handleQuickNoteBlur(event) {
   const creatorId = control.dataset.creatorId;
   window.clearTimeout(quickNoteTimers.get(creatorId));
   quickNoteTimers.delete(creatorId);
-  updateCreatorField(creatorId, "quickNote", control.value, "table");
+  quickNoteDrafts.set(creatorId, control.value);
+  saveQuickNote(creatorId);
+}
+
+async function saveQuickNote(creatorId) {
+  const creator = getCreatorById(creatorId);
+  if (!creator || !quickNoteDrafts.has(creatorId)) return;
+  const value = quickNoteDrafts.get(creatorId);
+  if ((creator.quickNote ?? "") === value) {
+    quickNoteDrafts.delete(creatorId);
+    setQuickNoteSaveState(creatorId, "saved", "Saved", true);
+    return;
+  }
+
+  const version = (quickNoteSaveVersions.get(creatorId) || 0) + 1;
+  quickNoteSaveVersions.set(creatorId, version);
+  pendingSaveRequests += 1;
+  setQuickNoteSaveState(creatorId, "saving", "Saving...");
+  try {
+    const response = await api.updateCreator(creatorId, "quickNote", value);
+    if (quickNoteSaveVersions.get(creatorId) === version) {
+      replaceCreator(response.creator);
+      if (quickNoteDrafts.get(creatorId) === value) {
+        quickNoteDrafts.delete(creatorId);
+        setQuickNoteSaveState(creatorId, "saved", "Saved", true);
+      } else {
+        setQuickNoteSaveState(creatorId, "unsaved", "Unsaved changes");
+      }
+      savedAt = new Date().toISOString();
+      renderDashboard(creators);
+      renderCreators();
+    }
+  } catch (error) {
+    if (quickNoteSaveVersions.get(creatorId) === version) {
+      setQuickNoteSaveState(creatorId, "failed", "Save failed");
+      renderCreators();
+    }
+    showToast(error.message, "error");
+  } finally {
+    pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
+  }
+}
+
+function setQuickNoteSaveState(creatorId, stateName, label, fade = false) {
+  window.clearTimeout(quickNoteFadeTimers.get(creatorId));
+  quickNoteSaveStates.set(creatorId, { state: stateName, label });
+  const indicator = document.querySelector(`[data-quick-note-state="${CSS.escape(creatorId)}"]`);
+  if (indicator) {
+    indicator.hidden = false;
+    indicator.className = `field-save-status state-${stateName}`;
+    indicator.textContent = label;
+  }
+  if (fade) {
+    quickNoteFadeTimers.set(creatorId, window.setTimeout(() => {
+      quickNoteSaveStates.delete(creatorId);
+      const current = document.querySelector(`[data-quick-note-state="${CSS.escape(creatorId)}"]`);
+      if (current) current.hidden = true;
+      quickNoteFadeTimers.delete(creatorId);
+    }, 2600));
+  }
 }
 
 function handleOpenAddCreator() {
@@ -503,6 +573,7 @@ async function createCreator(button) {
   }
 
   setSaveLoading(button, true);
+  setModalWorkflowState("saving", "Saving...");
   try {
     const payload = getFormValues("addCreatorForm");
     const response = await api.createCreator(payload);
@@ -514,6 +585,7 @@ async function createCreator(button) {
     document.getElementById("creatorDialog").close();
     showToast("Creator added successfully.");
   } catch (error) {
+    setModalWorkflowState("failed", "Save failed");
     console.error("Add Creator failed", {
       error,
       payload: getFormValues("addCreatorForm"),
@@ -535,6 +607,7 @@ async function saveCreatorProfile(creatorId, button) {
   }
 
   setSaveLoading(button, true);
+  setModalWorkflowState("saving", "Saving...");
   try {
     const response = await api.updateCreatorProfile(creatorId, getFormValues("editCreatorForm"));
     replaceCreator(response.creator);
@@ -544,8 +617,10 @@ async function saveCreatorProfile(creatorId, button) {
     activeCreatorId = response.creator.id;
     openCreatorModal(response.creator, session.permissions);
     initializeModalDirty("timeline");
+    setModalWorkflowState("saved", "Saved", true);
     showToast("Changes saved successfully.");
   } catch (error) {
+    setModalWorkflowState("failed", "Save failed");
     showToast(error.message, "error");
   } finally {
     setSaveLoading(button, false);
@@ -581,14 +656,17 @@ async function addTimelineEntry(creatorId, button) {
   }
 
   setSaveLoading(button, true);
+  setModalWorkflowState("saving", "Saving...");
   try {
     const response = await api.addTimelineEntry(creatorId, { type, message });
     replaceCreator(response.creator);
     resetModalDirty();
     renderCreatorDetails(response.creator, session.permissions);
     initializeModalDirty("timeline");
+    setModalWorkflowState("saved", "Saved", true);
     showToast("Changes saved successfully.");
   } catch (error) {
+    setModalWorkflowState("failed", "Save failed");
     showToast(error.message, "error");
   } finally {
     setSaveLoading(button, false);
@@ -627,13 +705,19 @@ async function markCreatorDmSent(creatorId) {
   }
 
   try {
+    pendingSaveRequests += 1;
+    setModalWorkflowState("saving", "Saving...");
     const response = await api.markDmSent(creatorId);
     replaceCreator(response.creator);
     renderAll();
     openCreatorModal(response.creator, session.permissions);
+    setModalWorkflowState("saved", "Saved", true);
     showToast("DM marked sent");
   } catch (error) {
+    setModalWorkflowState("failed", "Save failed");
     showToast(error.message, "error");
+  } finally {
+    pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
   }
 }
 
@@ -646,19 +730,24 @@ async function updateCreatorField(creatorId, field, value, source) {
   const oldValue = creator[field] ?? "";
 
   try {
+    pendingSaveRequests += 1;
+    setSaveState("Saving...");
     const response = await api.updateCreator(creatorId, field, value);
     replaceCreator(response.creator);
     undoStack.unshift({ creatorId, field, oldValue });
     undoStack = undoStack.slice(0, 10);
     document.getElementById("undoEdit").disabled = false;
     savedAt = new Date().toISOString();
-    setSaveState("Saved to database");
+    setSaveState("Saved");
     showToast("Saved");
     renderDashboard(creators);
     renderCreators();
   } catch (error) {
+    setSaveState("Save failed");
     showToast(error.message, "error");
     renderCreators();
+  } finally {
+    pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
   }
 
   if (source === "modal") {
@@ -892,6 +981,8 @@ function serializeForm(formId) {
 
 function setModalDirty(isDirty) {
   modalDirty = Boolean(isDirty);
+  if (modalDirty && !modalSaving) setModalWorkflowState("unsaved", "Unsaved changes");
+  if (!modalDirty && !modalSaving) setModalWorkflowState("idle", "");
   updateModalDirtyUi();
 }
 
@@ -901,6 +992,21 @@ function resetModalDirty() {
   modalInitialSnapshot = "";
   modalSaving = false;
   updateModalDirtyUi();
+}
+
+function setModalWorkflowState(stateName, label, fade = false) {
+  window.clearTimeout(modalSaveStateTimer);
+  const indicator = document.getElementById("modalSaveState");
+  if (!indicator) return;
+  indicator.hidden = stateName === "idle";
+  indicator.className = `workflow-save-state state-${stateName}`;
+  indicator.textContent = label;
+  if (fade) {
+    modalSaveStateTimer = window.setTimeout(() => {
+      indicator.hidden = true;
+      indicator.textContent = "";
+    }, 2600);
+  }
 }
 
 function updateModalDirtyUi() {
@@ -961,7 +1067,7 @@ function confirmLeaveModal() {
 }
 
 function confirmLeaveDirty() {
-  if (!modalDirty && !settingsDirty) {
+  if (!hasUnsavedWork()) {
     return true;
   }
 
@@ -970,6 +1076,7 @@ function confirmLeaveDirty() {
     resetModalDirty();
     settingsDraft = { ...settings };
     setSettingsDirty(false);
+    discardQuickNoteDrafts();
     applySettings(settings);
     const dialog = document.getElementById("creatorDialog");
     if (dialog.open) {
@@ -990,12 +1097,25 @@ function requestCloseModal() {
 }
 
 function handleBeforeUnload(event) {
-  if (!modalDirty && !settingsDirty) {
+  if (!hasUnsavedWork()) {
     return;
   }
 
   event.preventDefault();
   event.returnValue = unsavedMessage;
+}
+
+function hasUnsavedWork() {
+  return modalDirty || modalSaving || settingsDirty || settingsSaving || quickNoteDrafts.size > 0 || quickNoteTimers.size > 0 || pendingSaveRequests > 0;
+}
+
+function discardQuickNoteDrafts() {
+  quickNoteTimers.forEach((timer) => window.clearTimeout(timer));
+  quickNoteFadeTimers.forEach((timer) => window.clearTimeout(timer));
+  quickNoteTimers.clear();
+  quickNoteDrafts.clear();
+  quickNoteSaveStates.clear();
+  quickNoteFadeTimers.clear();
 }
 
 function setSettingsDirty(isDirty) {
@@ -1014,8 +1134,10 @@ function updateSettingsDirtyUi() {
     return;
   }
 
-  badge.hidden = !settingsDirty;
-  button.disabled = !settingsDirty;
+  badge.hidden = !settingsDirty && !settingsSaving;
+  badge.textContent = settingsSaving ? "Saving..." : settingsDirty ? "Unsaved changes" : badge.textContent;
+  badge.className = `dirty-badge ${settingsSaving ? "state-saving" : settingsDirty ? "state-unsaved" : ""}`;
+  button.disabled = !settingsDirty || settingsSaving;
 }
 
 function updateAccentColor(event) {
@@ -1036,23 +1158,37 @@ function saveSettingsChanges() {
     return;
   }
 
+  settingsSaving = true;
   button.disabled = true;
   button.classList.add("is-saving");
   button.textContent = "Saving...";
 
+  let resultState = "";
   try {
     settings = { ...settingsDraft };
     saveSettings(settings);
     setSettingsDirty(false);
     applySettings(settings);
+    resultState = "saved";
     showToast("Changes saved successfully.");
   } catch (error) {
+    resultState = "failed";
     showToast(error.message || "Unable to save settings", "error");
     updateSettingsDirtyUi();
   } finally {
+    settingsSaving = false;
     button.classList.remove("is-saving");
     button.textContent = "Save Changes";
     updateSettingsDirtyUi();
+    const badge = document.getElementById("settingsDirtyBadge");
+    if (resultState) {
+      badge.hidden = false;
+      badge.textContent = resultState === "saved" ? "Saved" : "Save failed";
+      badge.className = `dirty-badge state-${resultState}`;
+      if (resultState === "saved") {
+        window.setTimeout(() => { if (!settingsDirty && !settingsSaving) badge.hidden = true; }, 2600);
+      }
+    }
   }
 }
 

@@ -32,8 +32,13 @@ export function toKebab(value) {
 }
 
 export function safeUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+
   try {
-    const url = new URL(String(value || ""), window.location.origin);
+    const url = new URL(text);
     return ["http:", "https:"].includes(url.protocol) ? url.href : "";
   } catch {
     return "";
