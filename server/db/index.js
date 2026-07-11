@@ -11,11 +11,61 @@ const marker = (n) => db.type === "postgres" ? `$${n}` : "?";
 const json = (value) => db.type === "postgres" ? value : JSON.stringify(value);
 const parsePayload = (value) => typeof value === "string" ? JSON.parse(value) : value;
 const isDevelopment = process.env.NODE_ENV !== "production";
+function creatorSelect() {
+  if (db.type === "postgres") {
+    return "payload, name, status, priority, last_upload, collab_posted, dm_sent, notes, quick_note, follow_up_date, discord_username, discord_id, roblox_username, youtube_url, tiktok_url, twitch_url, twitter_url, category";
+  }
+
+  return `payload,
+    json_extract(payload, '$.name') AS name,
+    json_extract(payload, '$.status') AS status,
+    json_extract(payload, '$.priority') AS priority,
+    json_extract(payload, '$.lastUploadDate') AS last_upload,
+    json_extract(payload, '$.collabPosted') AS collab_posted,
+    json_extract(payload, '$.dmSent') AS dm_sent,
+    json_extract(payload, '$.notes') AS notes,
+    quick_note, follow_up_date, discord_username, discord_id, roblox_username,
+    youtube_url, tiktok_url, twitch_url, twitter_url, category`;
+}
+
+function dateValue(value) {
+  if (!value) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
 
 function mapCreatorRow(row) {
+  const payload = parsePayload(row.payload);
   return {
-    ...parsePayload(row.payload),
+    ...payload,
+    name: row.name,
+    status: row.status || "Inactive",
+    priority: row.priority || "Medium",
+    lastUploadDate: dateValue(row.last_upload),
+    collabPosted: row.collab_posted || "No",
+    dmSent: row.dm_sent || "No",
+    notes: row.notes ?? "",
     quickNote: row.quick_note ?? "",
+    followUpDate: dateValue(row.follow_up_date),
+    followUp: row.follow_up_date ? "Yes" : "No",
+    discordUsername: row.discord_username ?? "",
+    discordId: row.discord_id ?? "",
+    robloxUsername: row.roblox_username ?? "",
+    youtubeUrl: row.youtube_url ?? "",
+    tiktokUrl: row.tiktok_url ?? "",
+    twitchUrl: row.twitch_url ?? "",
+    twitterUrl: row.twitter_url ?? "",
+    category: row.category ?? "",
+  };
+}
+
+function mapTimelineRow(row) {
+  return {
+    timestamp: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    actorUsername: row.actor || "System",
+    actorRole: row.actor_role || "system",
+    type: row.type,
+    message: row.message,
   };
 }
 
@@ -34,13 +84,23 @@ async function initDatabase() {
 async function closeDatabase() { if (db) await db.close(); }
 
 async function getCreators(options = {}, tx = db) {
-  const rows = await tx.all(`SELECT payload, quick_note FROM creators ${options.includeDeleted ? "" : `WHERE deleted = ${db.type === "postgres" ? "FALSE" : "0"}`} ORDER BY ${db.type === "postgres" ? "normalized_name" : "LOWER(json_extract(payload, '$.name'))"}`);
-  return rows.map(mapCreatorRow);
+  const deletedFilter = options.includeDeleted ? "" : `WHERE deleted = ${db.type === "postgres" ? "FALSE" : "0"}`;
+  const rows = await tx.all(`SELECT ${creatorSelect()} FROM creators ${deletedFilter} ORDER BY ${db.type === "postgres" ? "normalized_name" : "LOWER(json_extract(payload, '$.name'))"}`);
+  const creators = rows.map(mapCreatorRow);
+  const byId = new Map(creators.map((creator) => [creator.id, creator]));
+  const timelineRows = await tx.all(`SELECT timeline_entries.* FROM timeline_entries JOIN creators ON creators.id = timeline_entries.creator_id ${options.includeDeleted ? "" : `WHERE creators.deleted = ${db.type === "postgres" ? "FALSE" : "0"}`} ORDER BY timeline_entries.created_at DESC, timeline_entries.id DESC`);
+  creators.forEach((creator) => { creator.timeline = []; });
+  timelineRows.forEach((row) => { byId.get(row.creator_id)?.timeline.push(mapTimelineRow(row)); });
+  return creators;
 }
 
 async function getCreator(id, tx = db) {
-  const row = await tx.get(`SELECT payload, quick_note FROM creators WHERE id = ${marker(1)}`, [id]);
-  return row ? mapCreatorRow(row) : null;
+  const row = await tx.get(`SELECT ${creatorSelect()} FROM creators WHERE id = ${marker(1)}`, [id]);
+  if (!row) return null;
+  const creator = mapCreatorRow(row);
+  const timelineRows = await tx.all(`SELECT * FROM timeline_entries WHERE creator_id = ${marker(1)} ORDER BY created_at DESC, id DESC`, [id]);
+  creator.timeline = timelineRows.map(mapTimelineRow);
+  return creator;
 }
 
 function creatorValues(c) {
@@ -84,7 +144,7 @@ async function createCreator(creator,user,ip) {
   return db.transaction(async(tx)=>{ const all=await getCreators({},tx); assertUnique(all,creator); let id=creator.id||"creator",n=2; while(await getCreator(id,tx))id=`${creator.id||"creator"}-${n++}`; const safe={...creator,id,deleted:false,createdAt:creator.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()}; await upsertCreator(safe,tx); await syncTimeline(safe,tx); await insertAudit({user,action:"creator.create",creatorId:id,newValue:safe.name,ip},tx); return safe; });
 }
 async function updateCreatorField({creatorId,field,value,user,ip}) { return mutateCreator({creatorId,user,ip,action:"creator.update",field,mutate(c){if(c[field]===value)return false;c[field]=value;if(field==="followUpDate")c.followUp=value?"Yes":"No";c.history=Array.isArray(c.history)?c.history:[];c.history.unshift({type:"Creator Updated",date:new Date().toISOString().slice(0,10),note:`${field} changed to ${value||"empty"}.`});return value;}}); }
-async function updateCreatorProfile({creatorId,updates,user,ip}) { return db.transaction(async(tx)=>{const c=await getCreator(creatorId,tx);if(!c||c.deleted)return null;const old={},next={};for(const [k,v] of Object.entries(updates)){if(c[k]!==v){old[k]=c[k]??"";next[k]=v;c[k]=v;}}if(!Object.keys(next).length)return c;if(Object.hasOwn(next,"followUpDate")){c.followUp=c.followUpDate?"Yes":"No";appendTimeline(c,normalizeTimelineEntry({type:"followup_set",message:c.followUpDate?`Set follow-up for ${c.followUpDate}.`:"Cleared follow-up date."},user));}c.updatedAt=new Date().toISOString();await upsertCreator(c,tx);await syncTimeline(c,tx);await insertAudit({user,action:"creator.profile.update",creatorId,field:"profile",oldValue:old,newValue:next,ip},tx);return c;}); }
+async function updateCreatorProfile({creatorId,updates,user,ip}) { return db.transaction(async(tx)=>{const c=await getCreator(creatorId,tx);if(!c||c.deleted)return null;const old={},next={};for(const [k,v] of Object.entries(updates)){if(c[k]!==v){old[k]=c[k]??"";next[k]=v;c[k]=v;}}if(!Object.keys(next).length)return c;if(Object.hasOwn(next,"followUpDate")){c.followUp=c.followUpDate?"Yes":"No";appendTimeline(c,normalizeTimelineEntry({type:"followup_set",message:c.followUpDate?`Set follow-up for ${c.followUpDate}.`:"Cleared follow-up date."},user));}c.updatedAt=new Date().toISOString();await upsertCreator(c,tx);await syncTimeline(c,tx);await insertAudit({user,action:"creator.profile.update",creatorId,field:"profile",oldValue:old,newValue:next,ip},tx);return getCreator(creatorId,tx);}); }
 async function softDeleteCreator({creatorId,user,ip}) { return mutateCreator({creatorId,user,ip,action:"creator.delete",field:"deleted",mutate(c){c.deleted=true;c.deletedAt=new Date().toISOString();c.status="Inactive";appendTimeline(c,normalizeTimelineEntry({type:"custom",message:"Creator deleted from active workspace."},user));return true;}}); }
 async function addTimelineEntry({creatorId,entry,user,ip,auditAction="creator.timeline.add"}) { return mutateCreator({creatorId,user,ip,action:auditAction,field:null,mutate(c){const item=normalizeTimelineEntry(entry,user);appendTimeline(c,item);return item;}}); }
 async function markDmSent({creatorId,user,ip}) { return mutateCreator({creatorId,user,ip,action:"creator.dm.mark_sent",field:"dmSent",mutate(c){c.dmSent="Yes";appendTimeline(c,normalizeTimelineEntry({type:"reminder_sent",message:"Marked DM sent."},user));return "Yes";}}); }

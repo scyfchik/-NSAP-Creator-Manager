@@ -20,6 +20,24 @@ const migrations = [{
     CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, created_by_discord_id TEXT, created_by_username TEXT, type TEXT NOT NULL DEFAULT 'manual', reason TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS timeline_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, creator_id TEXT NOT NULL REFERENCES creators(id) ON DELETE CASCADE, actor TEXT, actor_role TEXT, type TEXT NOT NULL, message TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
   `,
+}, {
+  id: "002_creator_date_columns",
+  postgres: `
+    CREATE OR REPLACE FUNCTION pg_temp.is_valid_date(value TEXT) RETURNS BOOLEAN AS $$
+    BEGIN
+      PERFORM value::DATE;
+      RETURN TRUE;
+    EXCEPTION WHEN OTHERS THEN
+      RETURN FALSE;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    UPDATE creators SET follow_up_date = NULL WHERE follow_up_date IS NOT NULL AND NOT pg_temp.is_valid_date(follow_up_date);
+    UPDATE creators SET last_upload = NULL WHERE last_upload IS NOT NULL AND NOT pg_temp.is_valid_date(last_upload);
+    ALTER TABLE creators ALTER COLUMN follow_up_date TYPE DATE USING NULLIF(follow_up_date, '')::date;
+    ALTER TABLE creators ALTER COLUMN last_upload TYPE DATE USING NULLIF(last_upload, '')::date;
+  `,
+  sqlite: "SELECT 1;",
 }];
 
 async function runMigrations(db) {

@@ -54,6 +54,15 @@ export function normalizeCreator(creator, index) {
     followUp: creator.followUp ?? "No",
     notes: creator.notes ?? "",
     quickNote: creator.quickNote ?? "",
+    followUpDate: creator.followUpDate ?? "",
+    discordUsername: creator.discordUsername ?? "",
+    discordId: creator.discordId ?? "",
+    robloxUsername: creator.robloxUsername ?? "",
+    category: creator.category ?? "Content Creator",
+    youtubeUrl: creator.youtubeUrl ?? "",
+    tiktokUrl: creator.tiktokUrl ?? "",
+    twitchUrl: creator.twitchUrl ?? "",
+    twitterUrl: creator.twitterUrl ?? "",
     subscriberCount: creator.subscriberCount ?? null,
     views: creator.views ?? null,
     averageViews: creator.averageViews ?? null,
@@ -61,6 +70,7 @@ export function normalizeCreator(creator, index) {
     riskLevel: creator.riskLevel ?? null,
     estimatedReach: creator.estimatedReach ?? null,
     history: Array.isArray(creator.history) ? creator.history : [],
+    timeline: Array.isArray(creator.timeline) ? creator.timeline : [],
   };
 }
 

@@ -2,6 +2,7 @@ const editableFields = require("./permissions").editableFields;
 
 const MAX_CREATORS_IMPORT = 5000;
 const MAX_HISTORY_ITEMS = 50;
+const MAX_TIMELINE_ITEMS = 500;
 const timelineTypes = new Set([
   "created",
   "note",
@@ -28,6 +29,7 @@ const profileFields = new Set([
   "notes",
   "quickNote",
   "followUpDate",
+  "lastUploadDate",
 ]);
 
 const fieldValidators = {
@@ -122,7 +124,7 @@ function normalizeCreator(creator, index) {
     twitchUrl: sanitizeUrl(creator.twitchUrl || creator.twitch_url || ""),
     twitterUrl: sanitizeUrl(creator.twitterUrl || creator.twitter_url || ""),
     lastContent: sanitizeText(creator.lastContent || "", 240),
-    lastUploadDate: sanitizeText(creator.lastUploadDate || "", 32),
+    lastUploadDate: sanitizeText(creator.lastUploadDate || creator.lastUpload || creator.last_upload || "", 32),
     collabPosted: validOption(creator.collabPosted, ["Yes", "No"], "No"),
     dmSent: validOption(creator.dmSent, ["Yes", "No"], "No"),
     response: sanitizeText(creator.response || "", 1000),
@@ -140,6 +142,7 @@ function normalizeCreator(creator, index) {
     createdAt: sanitizeText(creator.createdAt || creator.created_at || "", 32),
     updatedAt: sanitizeText(creator.updatedAt || creator.updated_at || "", 32),
     history: normalizeHistory(creator.history),
+    timeline: normalizeTimeline(creator.timeline),
   };
 }
 
@@ -269,17 +272,23 @@ function sanitizeProfileValue(field, value) {
   }
 
   if (field === "status") {
-    return validOption(value, ["Active", "Inactive", "On Break"], "Active");
+    if (!["Active", "Inactive", "On Break"].includes(value)) {
+      throwRequestError("Invalid value for status.", 400);
+    }
+    return value;
   }
 
   if (field === "priority") {
-    return validOption(value, ["High", "Medium", "Low"], "Medium");
+    if (!["High", "Medium", "Low"].includes(value)) {
+      throwRequestError("Invalid value for priority.", 400);
+    }
+    return value;
   }
 
-  if (field === "followUpDate") {
+  if (field === "followUpDate" || field === "lastUploadDate") {
     const date = sanitizeText(value || "", 32);
     if (date && !isDateLike(date)) {
-      throwRequestError("Follow-up date must use YYYY-MM-DD.", 400);
+      throwRequestError(`${field === "followUpDate" ? "Follow-up" : "Last upload"} date must be a valid YYYY-MM-DD date.`, 400);
     }
     return date;
   }
@@ -302,7 +311,13 @@ function sanitizeDiscordId(value) {
 }
 
 function isDateLike(value) {
-  return typeof value === "string" && (value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value));
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
 function sanitizeText(value, maxLength = 500) {
@@ -368,6 +383,14 @@ function normalizeHistory(history) {
     date: sanitizeText(item?.date || "", 32),
     note: sanitizeText(item?.note || "", 500),
   }));
+}
+
+function normalizeTimeline(timeline) {
+  if (!Array.isArray(timeline)) {
+    return [];
+  }
+
+  return timeline.slice(0, MAX_TIMELINE_ITEMS).map((entry) => normalizeTimelineEntry(entry));
 }
 
 function createStableId(creator, index) {

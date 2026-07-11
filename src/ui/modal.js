@@ -59,6 +59,7 @@ const profileFields = [
   ["category", "Category", "text"],
   ["quickNote", "Quick Note", "text"],
   ["followUpDate", "Follow-up Date", "date"],
+  ["lastUploadDate", "Last Upload", "date"],
   ["notes", "Notes", "textarea"],
 ];
 
