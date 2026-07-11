@@ -12,6 +12,7 @@ const editableFields = new Set([
   "dmSent",
   "collabPosted",
   "notes",
+  "quickNote",
   "lastContent",
   "lastUploadDate",
   "followUp",

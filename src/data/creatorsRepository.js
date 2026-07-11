@@ -53,6 +53,7 @@ export function normalizeCreator(creator, index) {
     deadline: creator.deadline ?? "",
     followUp: creator.followUp ?? "No",
     notes: creator.notes ?? "",
+    quickNote: creator.quickNote ?? "",
     subscriberCount: creator.subscriberCount ?? null,
     views: creator.views ?? null,
     averageViews: creator.averageViews ?? null,
