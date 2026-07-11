@@ -13,8 +13,13 @@ function requireEnv(name) {
   return value;
 }
 
+function isPostgresUrl(value) {
+  return /^postgres(?:ql)?:\/\//i.test(String(value || ""));
+}
+
 function getDatabasePath() {
-  const raw = process.env.DATABASE_URL || "./server/data/nsap.sqlite";
+  const databaseUrl = process.env.DATABASE_URL || "";
+  const raw = process.env.SQLITE_PATH || (isPostgresUrl(databaseUrl) ? "./server/data/nsap.sqlite" : databaseUrl) || "./server/data/nsap.sqlite";
   if (raw.startsWith("sqlite://")) {
     return raw.replace("sqlite://", "");
   }
@@ -35,6 +40,9 @@ module.exports = {
   publicDir: rootDir,
   port: Number(process.env.PORT || 4173),
   databasePath: getDatabasePath(),
+  databaseUrl: process.env.DATABASE_URL || "",
+  databaseSsl: process.env.DATABASE_SSL === "true",
+  databaseType: isPostgresUrl(process.env.DATABASE_URL) ? "postgres" : "sqlite",
   allowedOrigins: getAllowedOrigins(),
   discord: {
     clientId: process.env.DISCORD_CLIENT_ID || "",
@@ -43,9 +51,10 @@ module.exports = {
   },
   sessionSecret: process.env.SESSION_SECRET || "development-only-change-me",
   sessionDays: Number(process.env.SESSION_DAYS || 14),
-  trustProxy: process.env.TRUST_PROXY !== "false",
+  trustProxy: process.env.TRUST_PROXY === "true" ? 1 : false,
   isProduction: process.env.NODE_ENV === "production",
   requireEnv,
+  isPostgresUrl,
 };
 
 function loadDotEnv(filePath) {

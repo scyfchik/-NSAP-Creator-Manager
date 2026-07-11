@@ -6,9 +6,11 @@ const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const path = require("node:path");
-const { allowedOrigins, discord, isProduction, publicDir, sessionSecret, trustProxy } = require("./config");
+const { allowedOrigins, databaseType, discord, isProduction, publicDir, sessionSecret, trustProxy } = require("./config");
 const { clearSession, getRequestUser, handleDiscordCallback, redirectToDiscord } = require("./auth");
 const {
+  addTimelineEntry,
+  createCreator,
   getAuditLog,
   getBackups,
   getCreators,
@@ -16,18 +18,21 @@ const {
   initDatabase,
   insertAudit,
   insertBackup,
+  markDmSent,
   replaceCreators,
   restoreBackup,
+  softDeleteCreator,
   updateCreatorField,
+  updateCreatorProfile,
   updateUserRole,
 } = require("./db");
 const { canAdmin, canEditCreator, canOwn, getClientPermissions, roleRank, validRoles } = require("./permissions");
 const { asyncHandler, ensureCsrfToken, requireCsrf } = require("./security");
-const { validateCreatorPayload, validateEdit } = require("./validation");
+const { validateCreatorPayload, validateEdit, validateNewCreator, validateProfileUpdate } = require("./validation");
 
-function createApp() {
+async function createApp() {
   assertProductionConfig();
-  initDatabase();
+  await initDatabase();
 
   const app = express();
   app.set("trust proxy", trustProxy);
@@ -88,10 +93,10 @@ function createApp() {
 
   app.get("/auth/discord", redirectToDiscord);
   app.get("/auth/discord/callback", asyncHandler(handleDiscordCallback));
-  app.post("/auth/logout", requireCsrf, (req, res) => {
-    clearSession(req, res);
+  app.post("/auth/logout", requireCsrf, asyncHandler(async (req, res) => {
+    await clearSession(req, res);
     res.json({ ok: true });
-  });
+  }));
 
   app.get("/api/session", (req, res) => {
     res.json({
@@ -101,11 +106,16 @@ function createApp() {
     });
   });
 
-  app.get("/api/creators", (req, res) => {
-    res.json({ creators: getCreators() });
-  });
+  app.get("/api/creators", asyncHandler(async (req, res) => {
+    res.json({ creators: await getCreators() });
+  }));
 
-  app.patch("/api/creators/:id", requireCsrf, requireCreatorEditor, (req, res) => {
+  app.post("/api/creators", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
+    const creator = await createCreator(validateNewCreator(req.body), req.user, req.ip);
+    res.status(201).json({ creator });
+  }));
+
+  app.patch("/api/creators/:id", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
     const { field, value } = req.body || {};
     const validation = validateEdit(field, value);
     if (!validation.ok) {
@@ -113,7 +123,7 @@ function createApp() {
       return;
     }
 
-    const creator = updateCreatorField({
+    const creator = await updateCreatorField({
       creatorId: req.params.id,
       field,
       value: validation.value,
@@ -127,10 +137,35 @@ function createApp() {
     }
 
     res.json({ creator });
-  });
+  }));
 
-  app.get("/api/export", requireAdministrator, (req, res) => {
-    insertAudit({
+  app.patch("/api/creators/:id/profile", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
+    const creator = await updateCreatorProfile({ creatorId: req.params.id, updates: validateProfileUpdate(req.body), user: req.user, ip: req.ip });
+    if (!creator) return res.status(404).json({ error: "Creator not found" });
+    res.json({ creator });
+  }));
+
+  app.post("/api/creators/:id/timeline", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
+    const creator = await addTimelineEntry({ creatorId: req.params.id, entry: req.body, user: req.user, ip: req.ip });
+    if (!creator) return res.status(404).json({ error: "Creator not found" });
+    res.json({ creator });
+  }));
+
+  app.post("/api/creators/:id/mark-dm-sent", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
+    const creator = await markDmSent({ creatorId: req.params.id, user: req.user, ip: req.ip });
+    if (!creator) return res.status(404).json({ error: "Creator not found" });
+    res.json({ creator });
+  }));
+
+  app.delete("/api/creators/:id", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
+    if (req.body?.confirmation !== req.params.id) return res.status(400).json({ error: "Creator ID confirmation does not match" });
+    const creator = await softDeleteCreator({ creatorId: req.params.id, user: req.user, ip: req.ip });
+    if (!creator) return res.status(404).json({ error: "Creator not found" });
+    res.json({ creator });
+  }));
+
+  app.get("/api/export", requireAdministrator, asyncHandler(async (req, res) => {
+    await insertAudit({
       user: req.user,
       action: "creators.export",
       creatorId: null,
@@ -145,26 +180,26 @@ function createApp() {
         exportedAt: new Date().toISOString(),
         app: "NSAP Creator Manager",
       },
-      creators: getCreators(),
+      creators: await getCreators(),
     });
-  });
+  }));
 
-  app.post("/api/import", requireCsrf, requireAdministrator, (req, res) => {
+  app.post("/api/import", requireCsrf, requireAdministrator, asyncHandler(async (req, res) => {
     const creators = validateCreatorPayload(req.body);
-    replaceCreators(creators, req.user, "Import JSON", {
+    await replaceCreators(creators, req.user, "Import JSON", {
       audit: true,
       backup: true,
       backupType: "manual",
       ip: req.ip,
     });
-    res.json({ ok: true, creators: getCreators() });
-  });
+    res.json({ ok: true, creators: await getCreators() });
+  }));
 
-  app.get("/api/users", requireAdministrator, (req, res) => {
-    res.json({ users: getUsers().map(publicUser) });
-  });
+  app.get("/api/users", requireAdministrator, asyncHandler(async (req, res) => {
+    res.json({ users: (await getUsers()).map(publicUser) });
+  }));
 
-  app.patch("/api/users/:discordId/role", requireCsrf, requireAdministrator, (req, res) => {
+  app.patch("/api/users/:discordId/role", requireCsrf, requireAdministrator, asyncHandler(async (req, res) => {
     const discordId = String(req.params.discordId || "");
     const role = String(req.body?.role || "");
 
@@ -183,7 +218,7 @@ function createApp() {
       return;
     }
 
-    const target = getUsers().find((item) => item.discord_id === discordId);
+    const target = (await getUsers()).find((item) => item.discord_id === discordId);
     if (!target) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -209,21 +244,17 @@ function createApp() {
       return;
     }
 
-    const updated = updateUserRole(discordId, role, req.user, req.ip);
+    const updated = await updateUserRole(discordId, role, req.user, req.ip);
     res.json({ user: publicUser(updated) });
-  });
+  }));
 
-  app.get("/api/audit", requireAdministrator, (req, res) => {
-    res.json({ audit: getAuditLog() });
-  });
+  app.get("/api/audit", requireAdministrator, asyncHandler(async (req, res) => res.json({ audit: await getAuditLog() })));
 
-  app.get("/api/backups", requireAdministrator, (req, res) => {
-    res.json({ backups: getBackups() });
-  });
+  app.get("/api/backups", requireAdministrator, asyncHandler(async (req, res) => res.json({ backups: await getBackups() })));
 
-  app.post("/api/backups", requireCsrf, requireAdministrator, (req, res) => {
-    insertBackup(req.user, "Manual backup", "manual");
-    insertAudit({
+  app.post("/api/backups", requireCsrf, requireAdministrator, asyncHandler(async (req, res) => {
+    await insertBackup(req.user, "Manual backup", "manual");
+    await insertAudit({
       user: req.user,
       action: "backup.create",
       creatorId: null,
@@ -232,24 +263,24 @@ function createApp() {
       newValue: "manual",
       ip: req.ip,
     });
-    res.status(201).json({ backups: getBackups() });
-  });
+    res.status(201).json({ backups: await getBackups() });
+  }));
 
-  app.post("/api/backups/:id/restore", requireCsrf, requireAdministrator, (req, res) => {
+  app.post("/api/backups/:id/restore", requireCsrf, requireAdministrator, asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: "Invalid backup ID" });
       return;
     }
 
-    const restored = restoreBackup(id, req.user, req.ip);
+    const restored = await restoreBackup(id, req.user, req.ip);
     if (!restored) {
       res.status(404).json({ error: "Backup not found" });
       return;
     }
 
-    res.json({ ok: true, creators: getCreators() });
-  });
+    res.json({ ok: true, creators: await getCreators() });
+  }));
 
   app.use("/api", (req, res) => {
     res.status(404).json({ error: "API route not found" });
@@ -367,6 +398,10 @@ function publicUser(user) {
 function assertProductionConfig() {
   if (!isProduction) {
     return;
+  }
+
+  if (databaseType !== "postgres") {
+    throw new Error("Production requires DATABASE_URL to be a valid postgresql:// connection string; SQLite fallback is disabled.");
   }
 
   if (!process.env.SESSION_SECRET || sessionSecret === "development-only-change-me" || sessionSecret.length < 32) {

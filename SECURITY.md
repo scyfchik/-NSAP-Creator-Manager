@@ -2,7 +2,7 @@
 
 ## Authentication
 
-Version 1.2 uses Discord OAuth2 with the `identify` scope. The backend exchanges the OAuth code for a Discord profile, stores the user in SQLite, and creates an HTTP-only session cookie.
+Version 1.2 uses Discord OAuth2 with the `identify` scope. The backend exchanges the OAuth code for a Discord profile, stores the user in the configured database, and creates an HTTP-only session cookie.
 
 Required secrets are read from environment variables:
 
@@ -12,7 +12,7 @@ Required secrets are read from environment variables:
 - `SESSION_SECRET`
 - `DATABASE_URL`
 
-Do not commit real secrets to the repository.
+Do not commit real secrets to the repository or expose `DATABASE_URL` to frontend code. PostgreSQL operations use parameterized queries and a connection pool. Production fails startup unless `DATABASE_URL` is a PostgreSQL URL.
 
 ## Permissions
 
@@ -61,4 +61,4 @@ Use HTTPS in production so session cookies can be marked secure. Set:
 NODE_ENV=production
 ```
 
-Use a long random `SESSION_SECRET`. Keep the SQLite database file outside public static hosting paths when deploying. For multi-instance production hosting, replace SQLite with PostgreSQL or Supabase and keep the same API permission model.
+Use a long random `SESSION_SECRET`. Set `DATABASE_URL` to the provider's PostgreSQL connection string and enable `DATABASE_SSL` when required. SQLite is a local-development fallback only. JSON backup restore remains protected by the existing role checks.

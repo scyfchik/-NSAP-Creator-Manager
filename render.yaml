@@ -6,15 +6,15 @@ services:
     buildCommand: npm install
     startCommand: npm start
     autoDeploy: true
-    disk:
-      name: nsap-sqlite-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        value: /var/data/nsap.sqlite
+        fromDatabase:
+          name: nsap-creator-manager-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "true"
       - key: TRUST_PROXY
         value: "true"
       - key: SESSION_DAYS
@@ -31,3 +31,7 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+
+databases:
+  - name: nsap-creator-manager-db
+    plan: starter

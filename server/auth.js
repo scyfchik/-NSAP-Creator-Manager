@@ -28,10 +28,10 @@ async function getRequestUser(req) {
   return getSessionUser(hashToken(token));
 }
 
-function clearSession(req, res) {
+async function clearSession(req, res) {
   const token = req.cookies?.[SESSION_COOKIE] || "";
   if (req.user) {
-    insertAudit({
+    await insertAudit({
       user: req.user,
       action: "session.logout",
       creatorId: null,
@@ -41,7 +41,7 @@ function clearSession(req, res) {
       ip: req.ip,
     });
   }
-  deleteSession(hashToken(token));
+  await deleteSession(hashToken(token));
   res.clearCookie(SESSION_COOKIE, cookieOptions());
 }
 
@@ -105,7 +105,7 @@ async function handleDiscordCallback(req, res, url) {
   }
 
   const profile = await userResponse.json();
-  const user = upsertUser({
+  const user = await upsertUser({
     discord_id: profile.id,
     username: profile.global_name || profile.username,
     avatar: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : "",
@@ -113,8 +113,8 @@ async function handleDiscordCallback(req, res, url) {
 
   const sessionToken = createToken();
   const expiresAt = new Date(Date.now() + sessionDays * 86400000).toISOString();
-  createSession(user.discord_id, hashToken(sessionToken), expiresAt);
-  insertAudit({
+  await createSession(user.discord_id, hashToken(sessionToken), expiresAt);
+  await insertAudit({
     user,
     action: "session.login",
     creatorId: null,
