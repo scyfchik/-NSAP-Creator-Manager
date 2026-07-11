@@ -117,6 +117,9 @@ async function createApp() {
 
   app.patch("/api/creators/:id", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
     const { field, value } = req.body || {};
+    if (!isProduction && field === "quickNote") {
+      console.info("[api:creator.patch]", { creatorId: req.params.id, field, value });
+    }
     const validation = validateEdit(field, value);
     if (!validation.ok) {
       res.status(400).json({ error: validation.message });
@@ -134,6 +137,10 @@ async function createApp() {
     if (!creator) {
       res.status(404).json({ error: "Creator not found" });
       return;
+    }
+
+    if (!isProduction && field === "quickNote") {
+      console.info("[api:creator.patch.result]", { creatorId: creator.id, quickNote: creator.quickNote });
     }
 
     res.json({ creator });

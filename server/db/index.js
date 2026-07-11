@@ -10,6 +10,14 @@ let db;
 const marker = (n) => db.type === "postgres" ? `$${n}` : "?";
 const json = (value) => db.type === "postgres" ? value : JSON.stringify(value);
 const parsePayload = (value) => typeof value === "string" ? JSON.parse(value) : value;
+const isDevelopment = process.env.NODE_ENV !== "production";
+
+function mapCreatorRow(row) {
+  return {
+    ...parsePayload(row.payload),
+    quickNote: row.quick_note ?? "",
+  };
+}
 
 async function initDatabase() {
   if (config.isProduction && config.databaseType !== "postgres") {
@@ -26,13 +34,13 @@ async function initDatabase() {
 async function closeDatabase() { if (db) await db.close(); }
 
 async function getCreators(options = {}, tx = db) {
-  const rows = await tx.all(`SELECT payload FROM creators ${options.includeDeleted ? "" : `WHERE deleted = ${db.type === "postgres" ? "FALSE" : "0"}`} ORDER BY ${db.type === "postgres" ? "normalized_name" : "LOWER(json_extract(payload, '$.name'))"}`);
-  return rows.map((row) => parsePayload(row.payload));
+  const rows = await tx.all(`SELECT payload, quick_note FROM creators ${options.includeDeleted ? "" : `WHERE deleted = ${db.type === "postgres" ? "FALSE" : "0"}`} ORDER BY ${db.type === "postgres" ? "normalized_name" : "LOWER(json_extract(payload, '$.name'))"}`);
+  return rows.map(mapCreatorRow);
 }
 
 async function getCreator(id, tx = db) {
-  const row = await tx.get(`SELECT payload FROM creators WHERE id = ${marker(1)}`, [id]);
-  return row ? parsePayload(row.payload) : null;
+  const row = await tx.get(`SELECT payload, quick_note FROM creators WHERE id = ${marker(1)}`, [id]);
+  return row ? mapCreatorRow(row) : null;
 }
 
 function creatorValues(c) {
@@ -65,7 +73,10 @@ async function mutateCreator({creatorId,user,ip,action,field,mutate}) {
     const creator=await getCreator(creatorId,tx); if(!creator||creator.deleted)return null;
     const oldValue=field ? creator[field] ?? "" : null; const changed=mutate(creator); if(changed===false)return creator;
     creator.updatedAt=new Date().toISOString(); await upsertCreator(creator,tx); await syncTimeline(creator,tx);
-    await insertAudit({user,action,creatorId,field,oldValue,newValue:field?creator[field]:changed,ip},tx); return creator;
+    await insertAudit({user,action,creatorId,field,oldValue,newValue:field?creator[field]:changed,ip},tx);
+    const persistedCreator = await getCreator(creatorId,tx);
+    if(isDevelopment && field==="quickNote")console.info("[db:creator.update]",{creatorId,quickNote:persistedCreator?.quickNote});
+    return persistedCreator;
   });
 }
 

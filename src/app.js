@@ -168,6 +168,7 @@ function wireEvents() {
   document.getElementById("creatorTable").addEventListener("click", handleTableClick);
   document.getElementById("creatorTable").addEventListener("input", handleInlineInput);
   document.getElementById("creatorTable").addEventListener("change", handleInlineEdit);
+  document.getElementById("creatorTable").addEventListener("focusout", handleQuickNoteBlur);
   document.getElementById("creatorTable").addEventListener("pointerdown", handleColumnResize);
   document.getElementById("dashboardView").addEventListener("click", handleOpenCreatorClick);
   document.getElementById("modalBody").addEventListener("input", handleModalEdit);
@@ -457,6 +458,18 @@ function handleInlineInput(event) {
     updateCreatorField(creatorId, "quickNote", control.value, "table");
     quickNoteTimers.delete(creatorId);
   }, 650));
+}
+
+function handleQuickNoteBlur(event) {
+  const control = event.target.closest("[data-inline-field='quickNote']");
+  if (!control || !session.permissions.canEdit) {
+    return;
+  }
+
+  const creatorId = control.dataset.creatorId;
+  window.clearTimeout(quickNoteTimers.get(creatorId));
+  quickNoteTimers.delete(creatorId);
+  updateCreatorField(creatorId, "quickNote", control.value, "table");
 }
 
 function handleOpenAddCreator() {
