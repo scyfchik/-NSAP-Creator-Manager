@@ -11,6 +11,45 @@ const marker = (n) => db.type === "postgres" ? `$${n}` : "?";
 const json = (value) => db.type === "postgres" ? value : JSON.stringify(value);
 const parsePayload = (value) => typeof value === "string" ? JSON.parse(value) : value;
 const isDevelopment = process.env.NODE_ENV !== "production";
+
+const POSTGRES_CREATOR_COLUMNS = [
+  "id", "normalized_name", "name", "display_name", "platform", "channel", "status", "priority",
+  "last_upload", "last_nsp_content", "collab_posted", "dm_sent", "notes", "quick_note", "follow_up_date",
+  "discord_username", "discord_id", "roblox_username", "youtube_url", "tiktok_url", "twitch_url", "twitter_url",
+  "category", "avatar", "subscribers", "views", "average_views", "latest_video", "latest_video_title",
+  "latest_video_url", "last_sync", "sync_status", "sync_error", "payload", "deleted", "deleted_at", "created_at",
+  "updated_at",
+];
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function serializeCreatorPayload(payload) {
+  if (!isPlainObject(payload)) {
+    throw new TypeError("Creator payload must be a plain object before JSONB serialization.");
+  }
+  return JSON.stringify(payload);
+}
+
+function buildPostgresCreatorUpsert(c, now = new Date().toISOString()) {
+  const params = [
+    c.id, String(c.name || "").trim().toLowerCase(), c.name, c.displayName || null, c.platform || null,
+    c.channel || null, c.status || null, c.priority || null, c.lastUploadDate || null, c.lastContent || null,
+    c.collabPosted || null, c.dmSent || null, c.notes || null, c.quickNote || null, c.followUpDate || null,
+    c.discordUsername || null, c.discordId || null, c.robloxUsername || null, c.youtubeUrl || null,
+    c.tiktokUrl || null, c.twitchUrl || null, c.twitterUrl || null, c.category || null, c.avatar || null,
+    c.subscriberCount ?? null, c.views ?? null, c.averageViews ?? null, JSON.stringify(c.latestVideo ?? null),
+    c.latestVideoTitle || null, c.latestVideoUrl || null, c.lastSync || null, c.syncStatus || null,
+    c.syncError || null, serializeCreatorPayload(c), Boolean(c.deleted), c.deletedAt || null,
+    c.createdAt || now, c.updatedAt || now,
+  ];
+  const updateColumns = POSTGRES_CREATOR_COLUMNS.filter((column) => column !== "id" && column !== "created_at");
+  const sql = `INSERT INTO creators (${POSTGRES_CREATOR_COLUMNS.join(",")}) VALUES (${params.map((_, index) => `$${index + 1}`).join(",")}) ON CONFLICT(id) DO UPDATE SET ${updateColumns.map((column) => `${column}=EXCLUDED.${column}`).join(",")}`;
+  return { sql, params, columns: POSTGRES_CREATOR_COLUMNS };
+}
 function creatorSelect() {
   if (db.type === "postgres") {
     return "payload, name, status, priority, last_upload, collab_posted, dm_sent, notes, quick_note, follow_up_date, discord_username, discord_id, roblox_username, youtube_url, tiktok_url, twitch_url, twitter_url, category, latest_video_title, latest_video_url, last_sync, sync_status, sync_error";
@@ -113,14 +152,10 @@ async function getCreator(id, tx = db) {
   return creator;
 }
 
-function creatorValues(c) {
-  return [c.id, String(c.name || "").trim().toLowerCase(), c.name, c.displayName || null, c.platform || null, c.channel || null, c.status || null, c.priority || null, c.lastUploadDate || null, c.lastContent || null, c.collabPosted || null, c.dmSent || null, c.notes || null, c.quickNote || null, c.followUpDate || null, c.discordUsername || null, c.discordId || null, c.robloxUsername || null, c.youtubeUrl || null, c.tiktokUrl || null, c.twitchUrl || null, c.twitterUrl || null, c.category || null, c.avatar || null, c.subscriberCount ?? null, c.views ?? null, c.averageViews ?? null, c.latestVideo || null, json(c), db.type === "postgres" ? Boolean(c.deleted) : Number(Boolean(c.deleted)), c.deletedAt || null, c.createdAt || new Date().toISOString(), c.updatedAt || new Date().toISOString()];
-}
-
 async function upsertCreator(c, tx = db) {
   if (db.type === "postgres") {
-    const values = creatorValues(c);
-    await tx.run(`INSERT INTO creators (id,normalized_name,name,display_name,platform,channel,status,priority,last_upload,last_nsp_content,collab_posted,dm_sent,notes,quick_note,follow_up_date,discord_username,discord_id,roblox_username,youtube_url,tiktok_url,twitch_url,twitter_url,category,avatar,subscribers,views,average_views,latest_video,payload,deleted,deleted_at,created_at,updated_at) VALUES (${values.map((_,i)=>`$${i+1}`).join(",")}) ON CONFLICT(id) DO UPDATE SET normalized_name=EXCLUDED.normalized_name,name=EXCLUDED.name,display_name=EXCLUDED.display_name,platform=EXCLUDED.platform,channel=EXCLUDED.channel,status=EXCLUDED.status,priority=EXCLUDED.priority,last_upload=EXCLUDED.last_upload,last_nsp_content=EXCLUDED.last_nsp_content,collab_posted=EXCLUDED.collab_posted,dm_sent=EXCLUDED.dm_sent,notes=EXCLUDED.notes,quick_note=EXCLUDED.quick_note,follow_up_date=EXCLUDED.follow_up_date,discord_username=EXCLUDED.discord_username,discord_id=EXCLUDED.discord_id,roblox_username=EXCLUDED.roblox_username,youtube_url=EXCLUDED.youtube_url,tiktok_url=EXCLUDED.tiktok_url,twitch_url=EXCLUDED.twitch_url,twitter_url=EXCLUDED.twitter_url,category=EXCLUDED.category,avatar=EXCLUDED.avatar,subscribers=EXCLUDED.subscribers,views=EXCLUDED.views,average_views=EXCLUDED.average_views,latest_video=EXCLUDED.latest_video,payload=EXCLUDED.payload,deleted=EXCLUDED.deleted,deleted_at=EXCLUDED.deleted_at,updated_at=EXCLUDED.updated_at`, values);
+    const { sql, params } = buildPostgresCreatorUpsert(c);
+    await tx.run(sql, params);
   } else {
     await tx.run(`INSERT INTO creators (id,payload,quick_note,follow_up_date,deleted,deleted_at,discord_username,discord_id,roblox_username,youtube_url,tiktok_url,twitch_url,twitter_url,category,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,quick_note=excluded.quick_note,follow_up_date=excluded.follow_up_date,deleted=excluded.deleted,deleted_at=excluded.deleted_at,discord_username=excluded.discord_username,discord_id=excluded.discord_id,roblox_username=excluded.roblox_username,youtube_url=excluded.youtube_url,tiktok_url=excluded.tiktok_url,twitch_url=excluded.twitch_url,twitter_url=excluded.twitter_url,category=excluded.category,updated_at=excluded.updated_at`, [c.id, JSON.stringify(c), c.quickNote||null,c.followUpDate||null,Number(Boolean(c.deleted)),c.deletedAt||null,c.discordUsername||null,c.discordId||null,c.robloxUsername||null,c.youtubeUrl||null,c.tiktokUrl||null,c.twitchUrl||null,c.twitterUrl||null,c.category||null,c.createdAt||new Date().toISOString(),c.updatedAt||new Date().toISOString()]);
   }
@@ -175,9 +210,6 @@ async function updateCreatorYouTubeSync({creatorId,result,user,ip}) {
     }
     creator.updatedAt = new Date().toISOString();
     await upsertCreator(creator, tx);
-    if (db.type === "postgres") {
-      await tx.run(`UPDATE creators SET latest_video_title=${marker(1)}, latest_video_url=${marker(2)}, last_sync=${marker(3)}, sync_status=${marker(4)}, sync_error=${marker(5)} WHERE id=${marker(6)}`, [creator.latestVideoTitle||null,creator.latestVideoUrl||null,creator.lastSync||null,creator.syncStatus||null,creator.syncError||null,creatorId]);
-    }
     await insertAudit({ user, action: "creator.youtube.sync", creatorId, field: "youtubeSync", oldValue, newValue: result, ip }, tx);
     return getCreator(creatorId, tx);
   });
@@ -217,4 +249,4 @@ function appendTimeline(c,e){c.timeline=Array.isArray(c.timeline)?c.timeline:[];
 function stringify(v){return v==null?null:typeof v==="string"?v:JSON.stringify(v);}
 function assertUnique(all,c){const norm=v=>String(v||"").trim().toLowerCase();if(all.some(x=>norm(x.name)===norm(c.name)||(c.channel&&norm(x.channel)===norm(c.channel))||(c.discordId&&x.discordId===c.discordId))){const e=new Error("A creator with this name, channel, or Discord ID already exists.");e.status=409;throw e;}}
 
-module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser};
+module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{buildPostgresCreatorUpsert,isPlainObject,serializeCreatorPayload}};
