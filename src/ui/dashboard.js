@@ -12,12 +12,23 @@ export function renderDashboard(creators) {
 
 function renderStats(creators) {
   const stats = getCreatorStats(creators);
+  const today = localDateKey(new Date());
+  const syncedToday = creators.filter((creator) => creator.lastSync && localDateKey(new Date(creator.lastSync)) === today).length;
+  const syncFailures = creators.filter((creator) => ["failed", "channel_not_found"].includes(creator.syncStatus)).length;
+  const manualUpdates = creators.filter((creator) => ["TikTok", "Twitch", "X", "X/Twitter"].includes(creator.platform)).length;
+  const uploadsToday = creators.filter((creator) => creator.lastUploadDate === today).length;
+  const inactiveUploads = creators.filter((creator) => (daysSinceUpload(creator.lastUploadDate) ?? 0) >= 31).length;
   const cards = [
     ["Total Creators", stats.total],
     ["Active Creators", stats.active],
     ["Need Follow-up", stats.followUp],
     ["Collaboration Missing", stats.collabMissing],
     ["Average Upload Age", stats.averageUploadAge === null ? "Unknown" : `${stats.averageUploadAge} days`],
+    ["Creators Synced Today", syncedToday],
+    ["Sync Failures", syncFailures],
+    ["Needs Manual Update", manualUpdates],
+    ["Uploads Today", uploadsToday],
+    ["Inactive Uploads", inactiveUploads],
   ];
 
   document.getElementById("statsGrid").innerHTML = cards
@@ -28,6 +39,13 @@ function renderStats(creators) {
       </article>
     `)
     .join("");
+}
+
+function localDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function renderPlatformDistribution(creators) {

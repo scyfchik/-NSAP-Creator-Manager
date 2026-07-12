@@ -98,6 +98,15 @@ export const api = {
       body: JSON.stringify({}),
     });
   },
+  syncYouTubeCreator(creatorId) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}/sync/youtube`, { method: "POST", body: JSON.stringify({}) });
+  },
+  startYouTubeSyncAll() {
+    return request("/api/sync/youtube/all", { method: "POST", body: JSON.stringify({}) });
+  },
+  getYouTubeSyncJob(jobId) {
+    return request(`/api/sync/youtube/jobs/${encodeURIComponent(jobId)}`);
+  },
   importCreators(payload) {
     return request("/api/import", {
       method: "POST",

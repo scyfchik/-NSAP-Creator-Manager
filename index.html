@@ -75,7 +75,15 @@
             <p class="eyebrow">Live overview</p>
             <h3 id="dashboardTitle">Dashboard</h3>
           </div>
-          <span class="save-state" id="saveState">Loading data</span>
+          <div class="button-row">
+            <span class="save-state" id="saveState">Loading data</span>
+            <button class="button button-primary" id="syncAllYouTube" type="button" hidden>Sync All</button>
+          </div>
+        </div>
+
+        <div class="sync-progress" id="youtubeSyncProgress" hidden>
+          <div><strong id="youtubeSyncCurrent">Preparing sync...</strong><span id="youtubeSyncCount"></span></div>
+          <div class="sync-progress-track"><span id="youtubeSyncBar"></span></div>
         </div>
 
         <div class="stats-grid" id="statsGrid"></div>

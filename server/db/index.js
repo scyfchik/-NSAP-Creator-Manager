@@ -13,7 +13,7 @@ const parsePayload = (value) => typeof value === "string" ? JSON.parse(value) : 
 const isDevelopment = process.env.NODE_ENV !== "production";
 function creatorSelect() {
   if (db.type === "postgres") {
-    return "payload, name, status, priority, last_upload, collab_posted, dm_sent, notes, quick_note, follow_up_date, discord_username, discord_id, roblox_username, youtube_url, tiktok_url, twitch_url, twitter_url, category";
+    return "payload, name, status, priority, last_upload, collab_posted, dm_sent, notes, quick_note, follow_up_date, discord_username, discord_id, roblox_username, youtube_url, tiktok_url, twitch_url, twitter_url, category, latest_video_title, latest_video_url, last_sync, sync_status, sync_error";
   }
 
   return `payload,
@@ -25,7 +25,12 @@ function creatorSelect() {
     json_extract(payload, '$.dmSent') AS dm_sent,
     json_extract(payload, '$.notes') AS notes,
     quick_note, follow_up_date, discord_username, discord_id, roblox_username,
-    youtube_url, tiktok_url, twitch_url, twitter_url, category`;
+    youtube_url, tiktok_url, twitch_url, twitter_url, category,
+    json_extract(payload, '$.latestVideoTitle') AS latest_video_title,
+    json_extract(payload, '$.latestVideoUrl') AS latest_video_url,
+    json_extract(payload, '$.lastSync') AS last_sync,
+    json_extract(payload, '$.syncStatus') AS sync_status,
+    json_extract(payload, '$.syncError') AS sync_error`;
 }
 
 function dateValue(value) {
@@ -56,6 +61,11 @@ function mapCreatorRow(row) {
     twitchUrl: row.twitch_url ?? "",
     twitterUrl: row.twitter_url ?? "",
     category: row.category ?? "",
+    latestVideoTitle: row.latest_video_title ?? "",
+    latestVideoUrl: row.latest_video_url ?? "",
+    lastSync: row.last_sync instanceof Date ? row.last_sync.toISOString() : row.last_sync || "",
+    syncStatus: row.sync_status ?? "",
+    syncError: row.sync_error ?? "",
   };
 }
 
@@ -149,6 +159,42 @@ async function softDeleteCreator({creatorId,user,ip}) { return mutateCreator({cr
 async function addTimelineEntry({creatorId,entry,user,ip,auditAction="creator.timeline.add"}) { return mutateCreator({creatorId,user,ip,action:auditAction,field:null,mutate(c){const item=normalizeTimelineEntry(entry,user);appendTimeline(c,item);return item;}}); }
 async function markDmSent({creatorId,user,ip}) { return mutateCreator({creatorId,user,ip,action:"creator.dm.mark_sent",field:"dmSent",mutate(c){c.dmSent="Yes";appendTimeline(c,normalizeTimelineEntry({type:"reminder_sent",message:"Marked DM sent."},user));return "Yes";}}); }
 
+async function updateCreatorYouTubeSync({creatorId,result,user,ip}) {
+  return db.transaction(async (tx) => {
+    const creator = await getCreator(creatorId, tx);
+    if (!creator || creator.deleted) return null;
+    const oldValue = { lastUploadDate: creator.lastUploadDate, latestVideoTitle: creator.latestVideoTitle, syncStatus: creator.syncStatus };
+    creator.lastSync = result.lastSync || new Date().toISOString();
+    creator.syncStatus = result.syncStatus;
+    creator.syncError = result.syncError || "";
+    if (result.syncStatus === "synced") {
+      creator.lastUploadDate = result.lastUploadDate;
+      creator.latestVideoTitle = result.latestVideoTitle;
+      creator.latestVideoUrl = result.latestVideoUrl;
+      creator.latestVideo = result.latestVideoTitle;
+    }
+    creator.updatedAt = new Date().toISOString();
+    await upsertCreator(creator, tx);
+    if (db.type === "postgres") {
+      await tx.run(`UPDATE creators SET latest_video_title=${marker(1)}, latest_video_url=${marker(2)}, last_sync=${marker(3)}, sync_status=${marker(4)}, sync_error=${marker(5)} WHERE id=${marker(6)}`, [creator.latestVideoTitle||null,creator.latestVideoUrl||null,creator.lastSync||null,creator.syncStatus||null,creator.syncError||null,creatorId]);
+    }
+    await insertAudit({ user, action: "creator.youtube.sync", creatorId, field: "youtubeSync", oldValue, newValue: result, ip }, tx);
+    return getCreator(creatorId, tx);
+  });
+}
+
+async function getYouTubeChannelMapping(cacheKey) {
+  return db.get(`SELECT channel_id, resolved_at FROM youtube_channel_mappings WHERE cache_key=${marker(1)}`, [cacheKey]);
+}
+
+async function setYouTubeChannelMapping(cacheKey, channelId) {
+  if (db.type === "postgres") {
+    await db.run("INSERT INTO youtube_channel_mappings (cache_key,channel_id,resolved_at) VALUES ($1,$2,NOW()) ON CONFLICT(cache_key) DO UPDATE SET channel_id=EXCLUDED.channel_id,resolved_at=NOW()", [cacheKey,channelId]);
+  } else {
+    await db.run("INSERT INTO youtube_channel_mappings (cache_key,channel_id,resolved_at) VALUES (?,?,CURRENT_TIMESTAMP) ON CONFLICT(cache_key) DO UPDATE SET channel_id=excluded.channel_id,resolved_at=CURRENT_TIMESTAMP", [cacheKey,channelId]);
+  }
+}
+
 async function replaceCreators(creators,user,reason,options={}) { const {audit=true,backup=true,backupType="manual",ip=null}=options; await db.transaction(async(tx)=>{if(backup)await insertBackup(user,reason,backupType,tx);await tx.run("DELETE FROM creators");for(const c of creators){await upsertCreator(c,tx);await syncTimeline(c,tx);}if(audit)await insertAudit({user,action:"creators.replace",newValue:`${creators.length} creators`,ip},tx);}); }
 async function insertBackup(user,reason,type="manual",tx=db) { const payload={schemaVersion:3,creators:await getCreators({},tx)};await tx.run(`INSERT INTO backups (created_by_discord_id,created_by_username,type,reason,payload) VALUES (${[1,2,3,4,5].map(marker).join(",")})`,[user?.discord_id||null,user?.username||"System",type,reason,json(payload)]);await pruneBackups(tx); }
 async function getBackups(){return db.all("SELECT id,created_by_discord_id,created_by_username,type,reason,created_at FROM backups ORDER BY id DESC LIMIT 50");}
@@ -171,4 +217,4 @@ function appendTimeline(c,e){c.timeline=Array.isArray(c.timeline)?c.timeline:[];
 function stringify(v){return v==null?null:typeof v==="string"?v:JSON.stringify(v);}
 function assertUnique(all,c){const norm=v=>String(v||"").trim().toLowerCase();if(all.some(x=>norm(x.name)===norm(c.name)||(c.channel&&norm(x.channel)===norm(c.channel))||(c.discordId&&x.discordId===c.discordId))){const e=new Error("A creator with this name, channel, or Discord ID already exists.");e.status=409;throw e;}}
 
-module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreators,getSessionUser,getUser,getUsers,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,softDeleteCreator,updateCreatorField,updateCreatorProfile,updateUserRole,upsertUser};
+module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser};

@@ -68,6 +68,8 @@ let modalSaving = false;
 let settingsDirty = false;
 let settingsSaving = false;
 let modalSaveStateTimer = 0;
+let youtubeSyncJob = null;
+let youtubeSyncPollTimer = 0;
 let session = {
   authenticated: false,
   user: null,
@@ -197,6 +199,7 @@ function wireEvents() {
   document.getElementById("accentColor").addEventListener("input", updateAccentColor);
   document.getElementById("densityMode").addEventListener("change", updateDensity);
   document.getElementById("saveSettings").addEventListener("click", saveSettingsChanges);
+  document.getElementById("syncAllYouTube").addEventListener("click", startYouTubeSyncAll);
   document.getElementById("createBackup").addEventListener("click", createBackup);
   document.getElementById("refreshAdmin").addEventListener("click", refreshAdmin);
   document.getElementById("usersList").addEventListener("change", handleUserRoleChange);
@@ -227,6 +230,7 @@ function renderAll() {
     permissions: session.permissions,
   });
   updateSettingsDirtyUi();
+  renderYouTubeSyncProgress();
   document.getElementById("undoEdit").disabled = undoStack.length === 0;
 }
 
@@ -427,6 +431,12 @@ function handleModalClick(event) {
       return;
     }
     markCreatorDmSent(markDmSent.dataset.markDmSent);
+    return;
+  }
+
+  const syncYouTube = event.target.closest("[data-sync-youtube]");
+  if (syncYouTube) {
+    syncYouTubeCreator(syncYouTube.dataset.syncYoutube);
   }
 }
 
@@ -719,6 +729,84 @@ async function markCreatorDmSent(creatorId) {
   } finally {
     pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
   }
+}
+
+async function syncYouTubeCreator(creatorId) {
+  if (!session.permissions.canEdit) {
+    showToast("Manager role required", "error");
+    return;
+  }
+  pendingSaveRequests += 1;
+  setModalWorkflowState("saving", "Syncing...");
+  try {
+    const response = await api.syncYouTubeCreator(creatorId);
+    replaceCreator(response.creator);
+    savedAt = new Date().toISOString();
+    renderAll();
+    activeCreatorId = response.creator.id;
+    openCreatorModal(response.creator, session.permissions);
+    initializeModalDirty("timeline");
+    const succeeded = response.creator.syncStatus === "synced";
+    setModalWorkflowState(succeeded ? "saved" : "failed", succeeded ? "Synced" : "Sync failed", succeeded);
+    showToast(succeeded ? "YouTube activity synced" : response.creator.syncError || "YouTube sync failed", succeeded ? "success" : "error");
+  } catch (error) {
+    setModalWorkflowState("failed", "Sync failed");
+    showToast(error.message, "error");
+  } finally {
+    pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
+  }
+}
+
+async function startYouTubeSyncAll() {
+  if (session.permissions.role !== "owner" || youtubeSyncJob?.status === "running") return;
+  const button = document.getElementById("syncAllYouTube");
+  button.disabled = true;
+  try {
+    const response = await api.startYouTubeSyncAll();
+    youtubeSyncJob = response.job;
+    renderYouTubeSyncProgress();
+    scheduleYouTubeSyncPoll();
+  } catch (error) {
+    button.disabled = false;
+    showToast(error.message, "error");
+  }
+}
+
+function scheduleYouTubeSyncPoll() {
+  window.clearTimeout(youtubeSyncPollTimer);
+  youtubeSyncPollTimer = window.setTimeout(pollYouTubeSyncJob, 1000);
+}
+
+async function pollYouTubeSyncJob() {
+  if (!youtubeSyncJob) return;
+  try {
+    youtubeSyncJob = (await api.getYouTubeSyncJob(youtubeSyncJob.id)).job;
+    renderYouTubeSyncProgress();
+    if (youtubeSyncJob.status === "completed") {
+      creators = (await loadCreators()).creators;
+      renderAll();
+      showToast(`YouTube sync complete: ${youtubeSyncJob.completed - youtubeSyncJob.failed} synced, ${youtubeSyncJob.failed} failed`);
+      return;
+    }
+    scheduleYouTubeSyncPoll();
+  } catch (error) {
+    showToast(error.message, "error");
+    document.getElementById("syncAllYouTube").disabled = false;
+  }
+}
+
+function renderYouTubeSyncProgress() {
+  const container = document.getElementById("youtubeSyncProgress");
+  const button = document.getElementById("syncAllYouTube");
+  button.hidden = session.permissions.role !== "owner";
+  const active = youtubeSyncJob && ["queued", "running"].includes(youtubeSyncJob.status);
+  button.disabled = Boolean(active);
+  container.hidden = !youtubeSyncJob;
+  if (!youtubeSyncJob) return;
+  const percent = youtubeSyncJob.total ? Math.round((youtubeSyncJob.completed / youtubeSyncJob.total) * 100) : 100;
+  document.getElementById("youtubeSyncCurrent").textContent = active ? youtubeSyncJob.currentCreator || "Preparing sync..." : "Sync complete";
+  document.getElementById("youtubeSyncCount").textContent = `${youtubeSyncJob.completed} / ${youtubeSyncJob.total}`;
+  document.getElementById("youtubeSyncBar").style.width = `${percent}%`;
 }
 
 async function updateCreatorField(creatorId, field, value, source) {

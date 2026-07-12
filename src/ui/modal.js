@@ -1,4 +1,4 @@
-import { daysSinceUpload, uploadAgeLabel, uploadAgeTone } from "../utils/dates.js";
+import { daysSinceUpload, relativeSyncLabel, uploadAgeLabel, uploadAgeTone, uploadHealthLabel } from "../utils/dates.js";
 import { renderAvatar, renderBadge } from "../utils/creatorVisuals.js";
 import { escapeHtml, formatNumber, formatOptional, safeUrl } from "../utils/format.js";
 
@@ -109,6 +109,8 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
   const channelUrl = getPrimaryChannelUrl(creator);
   const contactItems = renderContactItems(creator);
   const metricItems = renderMetricItems(creator);
+  const latestVideoUrl = getPlatformUrl(creator.latestVideoUrl, ["youtube.com", "youtu.be"]);
+  const canYouTubeSync = Boolean(creator.youtubeUrl || creator.platform === "YouTube");
 
   document.getElementById("modalName").textContent = creator.name;
   document.getElementById("modalBody").innerHTML = `
@@ -130,6 +132,8 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
         <button class="button button-secondary" data-copy-template="${escapeHtml(creator.id)}" type="button">Copy Reminder</button>
         ${permissions.canEdit ? `<button class="button button-secondary" data-mark-dm-sent="${escapeHtml(creator.id)}" type="button">Mark DM Sent</button>` : ""}
         ${permissions.canEdit ? `<button class="button button-secondary" data-edit-profile="${escapeHtml(creator.id)}" type="button">Edit Profile</button>` : ""}
+        ${permissions.canEdit && canYouTubeSync ? `<button class="button button-secondary" data-sync-youtube="${escapeHtml(creator.id)}" type="button">Sync YouTube</button>` : ""}
+        ${latestVideoUrl ? `<a class="button button-secondary" href="${escapeHtml(latestVideoUrl)}" target="_blank" rel="noreferrer">Open Latest Video</a>` : ""}
         ${permissions.canDeleteCreators ? `<button class="button button-danger" data-delete-creator="${escapeHtml(creator.id)}" type="button">Delete Creator</button>` : ""}
       </div>
     </div>
@@ -141,9 +145,12 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
         ${renderReadOnly("Quick Note", escapeHtml(formatOptional(creator.quickNote, "No quick note.")))}
         ${renderReadOnly("Follow-up", escapeHtml(formatOptional(creator.followUpDate, "No follow-up scheduled.")))}
         ${renderReadOnly("Last Upload", escapeHtml(formatOptional(creator.lastUploadDate, "No upload date.")))}
-        ${renderReadOnly("Upload Health", `<b class="age age-${uploadAgeTone(days)}">${escapeHtml(uploadAgeLabel(days))}</b>`)}
+        ${renderReadOnly("Upload Health", `<b class="age age-${uploadAgeTone(days)}">${escapeHtml(uploadHealthLabel(days))} / ${escapeHtml(uploadAgeLabel(days))}</b>`)}
         ${renderReadOnly("Collaboration", escapeHtml(creator.collabPosted === "Yes" ? "Posted" : "Not posted"))}
         ${renderReadOnly("DM Status", escapeHtml(creator.dmSent === "Yes" ? "Sent" : "Not sent"))}
+        ${renderReadOnly("Last Sync", escapeHtml(relativeSyncLabel(creator.lastSync)))}
+        ${renderReadOnly("Sync Status", escapeHtml(getSyncStatusLabel(creator)))}
+        ${creator.latestVideoTitle ? renderReadOnly("Latest Video", escapeHtml(creator.latestVideoTitle)) : ""}
         </div>
       </section>
 
@@ -339,7 +346,6 @@ function renderMetricItems(creator) {
     Number.isFinite(creator.subscriberCount) ? renderCompactDetail("Subscribers", escapeHtml(formatNumber(creator.subscriberCount))) : "",
     Number.isFinite(creator.views) ? renderCompactDetail("Views", escapeHtml(formatNumber(creator.views))) : "",
     Number.isFinite(creator.averageViews) ? renderCompactDetail("Average Views", escapeHtml(formatNumber(creator.averageViews))) : "",
-    creator.latestVideo ? renderCompactDetail("Latest Video", escapeHtml(creator.latestVideo)) : "",
   ].filter(Boolean).join("");
 }
 
@@ -379,6 +385,15 @@ function getPlatformUrl(value, hosts) {
   if (!url) return "";
   const hostname = new URL(url).hostname.toLowerCase();
   return hosts.some((host) => hostname === host || hostname.endsWith(`.${host}`)) ? url : "";
+}
+
+function getSyncStatusLabel(creator) {
+  if (["TikTok", "Twitch", "X", "X/Twitter"].includes(creator.platform) && !creator.youtubeUrl) return "Manual Update Required";
+  if (creator.syncStatus === "synced") return relativeSyncLabel(creator.lastSync);
+  if (creator.syncStatus === "channel_not_found") return "Channel not found";
+  if (creator.syncStatus === "manual") return "Manual Update Required";
+  if (creator.syncStatus === "failed") return creator.syncError || "Sync failed";
+  return "Not synced";
 }
 
 function renderInput(name, label, value = "", type = "text", required = false) {

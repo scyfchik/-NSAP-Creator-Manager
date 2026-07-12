@@ -6,10 +6,11 @@
     "start": "node server/server.js",
     "dev": "node server/server.js",
     "build": "npm run check",
-    "check": "node --check server/server.js && node --check server/app.js && node --check server/auth.js && node --check server/db/index.js && node --check server/db/postgres.js && node --check server/db/sqlite.js && node --check server/db/migrations.js && node --check server/scripts/migrate-sqlite-to-postgres.js && node --check server/scripts/audit-creator-persistence.js && node --check server/security.js && node --check server/validation.js",
+    "check": "node --check server/server.js && node --check server/app.js && node --check server/auth.js && node --check server/db/index.js && node --check server/db/postgres.js && node --check server/db/sqlite.js && node --check server/db/migrations.js && node --check server/integrations/youtube.js && node --check server/integrations/youtubeSync.js && node --check server/integrations/youtube.test.js && node --check server/scripts/migrate-sqlite-to-postgres.js && node --check server/scripts/audit-creator-persistence.js && node --check server/security.js && node --check server/validation.js",
     "migrate": "node -e \"require('./server/db').initDatabase().then(()=>require('./server/db').closeDatabase())\"",
     "migrate:sqlite-to-postgres": "node server/scripts/migrate-sqlite-to-postgres.js",
-    "audit:postgres-persistence": "node server/scripts/audit-creator-persistence.js"
+    "audit:postgres-persistence": "node server/scripts/audit-creator-persistence.js",
+    "test:youtube-sync": "node server/integrations/youtube.test.js"
   },
   "engines": {
     "node": ">=22.5.0"
@@ -20,6 +21,7 @@
     "cors": "2.8.6",
     "express": "4.22.2",
     "express-rate-limit": "7.5.1",
+    "fast-xml-parser": "5.3.0",
     "helmet": "7.2.0",
     "morgan": "1.11.0",
     "pg": "8.16.3"

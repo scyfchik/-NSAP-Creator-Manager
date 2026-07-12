@@ -38,6 +38,27 @@ const migrations = [{
     ALTER TABLE creators ALTER COLUMN last_upload TYPE DATE USING NULLIF(last_upload, '')::date;
   `,
   sqlite: "SELECT 1;",
+}, {
+  id: "003_youtube_sync",
+  postgres: `
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS latest_video_title TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS latest_video_url TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS last_sync TIMESTAMPTZ;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS sync_status TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS sync_error TEXT;
+    CREATE TABLE IF NOT EXISTS youtube_channel_mappings (
+      cache_key TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      resolved_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `,
+  sqlite: `
+    CREATE TABLE IF NOT EXISTS youtube_channel_mappings (
+      cache_key TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      resolved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `,
 }];
 
 async function runMigrations(db) {
