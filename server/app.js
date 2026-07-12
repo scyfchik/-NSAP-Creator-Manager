@@ -23,13 +23,14 @@ const {
   restoreBackup,
   softDeleteCreator,
   updateCreatorField,
+  updateCreatorNsapDecision,
   updateCreatorProfile,
   updateUserRole,
 } = require("./db");
 const { createYouTubeSyncManager } = require("./integrations/youtubeSync");
 const { canAdmin, canEditCreator, canOwn, getClientPermissions, roleRank, validRoles } = require("./permissions");
 const { asyncHandler, ensureCsrfToken, requireCsrf } = require("./security");
-const { validateCreatorPayload, validateEdit, validateNewCreator, validateProfileUpdate } = require("./validation");
+const { validateCreatorPayload, validateEdit, validateNewCreator, validateNsapDecision, validateProfileUpdate } = require("./validation");
 
 async function createApp() {
   assertProductionConfig();
@@ -168,6 +169,17 @@ async function createApp() {
 
   app.post("/api/creators/:id/sync/youtube", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
     const creator = await youtubeSync.syncCreator(req.params.id, req.user, req.ip);
+    if (!creator) return res.status(404).json({ error: "Creator not found" });
+    res.json({ creator });
+  }));
+
+  app.post("/api/creators/:id/youtube/nsap-decision", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
+    const creator = await updateCreatorNsapDecision({
+      creatorId: req.params.id,
+      decision: validateNsapDecision(req.body),
+      user: req.user,
+      ip: req.ip,
+    });
     if (!creator) return res.status(404).json({ error: "Creator not found" });
     res.json({ creator });
   }));

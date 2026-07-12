@@ -33,6 +33,7 @@ const profileFields = new Set([
   "collabPosted",
   "dmSent",
 ]);
+const nsapMatchStatuses = ["matched", "no_match", "manual_confirmed", "manual_rejected", "sync_failed", "unsupported"];
 
 const fieldValidators = {
   status(value) {
@@ -142,6 +143,20 @@ function normalizeCreator(creator, index) {
     lastSync: sanitizeText(creator.lastSync || creator.last_sync || "", 40),
     syncStatus: sanitizeText(creator.syncStatus || creator.sync_status || "", 40),
     syncError: sanitizeText(creator.syncError || creator.sync_error || "", 500),
+    latestChannelVideoTitle: sanitizeText(creator.latestChannelVideoTitle || creator.latest_channel_video_title || "", 500),
+    latestChannelVideoUrl: sanitizeUrl(creator.latestChannelVideoUrl || creator.latest_channel_video_url || ""),
+    latestChannelUploadDate: sanitizeOptionalDate(creator.latestChannelUploadDate || creator.latest_channel_upload_date),
+    latestNsapVideoTitle: sanitizeText(creator.latestNsapVideoTitle || creator.latest_nsap_video_title || "", 500),
+    latestNsapVideoUrl: sanitizeUrl(creator.latestNsapVideoUrl || creator.latest_nsap_video_url || ""),
+    latestNsapUploadDate: sanitizeOptionalDate(creator.latestNsapUploadDate || creator.latest_nsap_upload_date),
+    nsapMatchStatus: validOption(creator.nsapMatchStatus || creator.nsap_match_status, nsapMatchStatuses, ""),
+    nsapMatchReason: sanitizeText(creator.nsapMatchReason || creator.nsap_match_reason || "", 500),
+    nsapMatchedKeyword: sanitizeText(creator.nsapMatchedKeyword || creator.nsap_matched_keyword || "", 160),
+    nsapDecisionVideoTitle: sanitizeText(creator.nsapDecisionVideoTitle || creator.nsap_decision_video_title || "", 500),
+    nsapDecisionVideoUrl: sanitizeUrl(creator.nsapDecisionVideoUrl || creator.nsap_decision_video_url || ""),
+    nsapDecisionVideoUploadDate: sanitizeOptionalDate(creator.nsapDecisionVideoUploadDate || creator.nsap_decision_video_upload_date),
+    nsapDecisionActor: sanitizeText(creator.nsapDecisionActor || creator.nsap_decision_actor || "", 120),
+    nsapDecisionAt: sanitizeOptionalTimestamp(creator.nsapDecisionAt || creator.nsap_decision_at),
     riskLevel: creator.riskLevel ? sanitizeText(creator.riskLevel, 80) : null,
     estimatedReach: nullableNumber(creator.estimatedReach),
     deleted: Boolean(creator.deleted),
@@ -229,6 +244,13 @@ function validateProfileUpdate(payload) {
   }
 
   return updates;
+}
+
+function validateNsapDecision(payload) {
+  if (!payload || !["confirmed", "rejected"].includes(payload.decision)) {
+    throwRequestError("NSAP decision must be confirmed or rejected.", 400);
+  }
+  return payload.decision;
 }
 
 function normalizeTimelineEntry(entry, actor = null) {
@@ -341,6 +363,16 @@ function sanitizeText(value, maxLength = 500) {
     .trim();
 }
 
+function sanitizeOptionalDate(value) {
+  const text = sanitizeText(value || "", 32);
+  return text && isDateLike(text) ? text : "";
+}
+
+function sanitizeOptionalTimestamp(value) {
+  const text = sanitizeText(value || "", 40);
+  return text && !Number.isNaN(Date.parse(text)) ? text : "";
+}
+
 function sanitizeUrl(value) {
   const text = sanitizeText(value, 2048);
   if (!text) {
@@ -430,5 +462,6 @@ module.exports = {
   validateCreatorPayload,
   validateEdit,
   validateNewCreator,
+  validateNsapDecision,
   validateProfileUpdate,
 };

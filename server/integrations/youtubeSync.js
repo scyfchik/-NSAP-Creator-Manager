@@ -33,10 +33,23 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
     const lastSync = new Date().toISOString();
     try {
       const upload = await client.syncCreator(creator);
-      return dbApi.updateCreatorYouTubeSync({ creatorId, user, ip, result: { ...upload, lastSync, syncStatus: "synced", syncError: "" } });
+      const result = reconcileNsapResult(creator, upload);
+      return dbApi.updateCreatorYouTubeSync({ creatorId, user, ip, result: { ...result, lastSync, syncStatus: "synced", syncError: "" } });
     } catch (error) {
       const normalized = normalizeSyncError(error);
-      return dbApi.updateCreatorYouTubeSync({ creatorId, user, ip, result: { lastSync, syncStatus: normalized.status, syncError: normalized.message } });
+      const manualStatus = isManualDecision(creator.nsapMatchStatus) ? creator.nsapMatchStatus : "";
+      return dbApi.updateCreatorYouTubeSync({
+        creatorId,
+        user,
+        ip,
+        result: {
+          lastSync,
+          syncStatus: normalized.status,
+          syncError: normalized.message,
+          nsapMatchStatus: manualStatus || (normalized.status === "manual" ? "unsupported" : "sync_failed"),
+          nsapMatchReason: manualStatus ? creator.nsapMatchReason : normalized.message,
+        },
+      });
     }
   }
 
@@ -69,6 +82,66 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
   return { getJob, startSyncAll, syncCreator };
 }
 
+function reconcileNsapResult(creator, upload) {
+  const general = {
+    latestChannelUploadDate: upload.latestChannelUploadDate,
+    latestChannelVideoTitle: upload.latestChannelVideoTitle,
+    latestChannelVideoUrl: upload.latestChannelVideoUrl,
+  };
+  const manualDecision = isManualDecision(creator.nsapMatchStatus);
+  const decisionDate = creator.nsapDecisionVideoUploadDate || "";
+  const hasNewerMatch = upload.nsapMatchStatus === "matched"
+    && (!manualDecision || !decisionDate || upload.latestNsapUploadDate > decisionDate);
+
+  if (hasNewerMatch) {
+    return {
+      ...general,
+      latestNsapUploadDate: upload.latestNsapUploadDate,
+      latestNsapVideoTitle: upload.latestNsapVideoTitle,
+      latestNsapVideoUrl: upload.latestNsapVideoUrl,
+      nsapMatchStatus: "matched",
+      nsapMatchReason: upload.nsapMatchReason,
+      nsapMatchedKeyword: upload.nsapMatchedKeyword,
+      nsapDecisionVideoTitle: "",
+      nsapDecisionVideoUrl: "",
+      nsapDecisionVideoUploadDate: "",
+      nsapDecisionActor: "",
+      nsapDecisionAt: "",
+    };
+  }
+
+  if (manualDecision) {
+    return {
+      ...general,
+      latestNsapUploadDate: creator.latestNsapUploadDate || "",
+      latestNsapVideoTitle: creator.latestNsapVideoTitle || "",
+      latestNsapVideoUrl: creator.latestNsapVideoUrl || "",
+      nsapMatchStatus: creator.nsapMatchStatus,
+      nsapMatchReason: creator.nsapMatchReason,
+      nsapMatchedKeyword: creator.nsapMatchedKeyword || "",
+      nsapDecisionVideoTitle: creator.nsapDecisionVideoTitle || "",
+      nsapDecisionVideoUrl: creator.nsapDecisionVideoUrl || "",
+      nsapDecisionVideoUploadDate: decisionDate,
+      nsapDecisionActor: creator.nsapDecisionActor || "",
+      nsapDecisionAt: creator.nsapDecisionAt || "",
+    };
+  }
+
+  return {
+    ...general,
+    latestNsapUploadDate: upload.nsapMatchStatus === "matched" ? upload.latestNsapUploadDate : creator.latestNsapUploadDate || "",
+    latestNsapVideoTitle: upload.nsapMatchStatus === "matched" ? upload.latestNsapVideoTitle : creator.latestNsapVideoTitle || "",
+    latestNsapVideoUrl: upload.nsapMatchStatus === "matched" ? upload.latestNsapVideoUrl : creator.latestNsapVideoUrl || "",
+    nsapMatchStatus: upload.nsapMatchStatus,
+    nsapMatchReason: upload.nsapMatchReason,
+    nsapMatchedKeyword: upload.nsapMatchedKeyword,
+  };
+}
+
+function isManualDecision(status) {
+  return status === "manual_confirmed" || status === "manual_rejected";
+}
+
 function normalizeSyncError(error) {
   if (!(error instanceof YouTubeSyncError)) return { status: "failed", message: "YouTube sync failed." };
   if (error.code === "manual") return { status: "manual", message: error.message };
@@ -76,4 +149,4 @@ function normalizeSyncError(error) {
   return { status: "failed", message: error.message };
 }
 
-module.exports = { TaskQueue, createYouTubeSyncManager, normalizeSyncError };
+module.exports = { TaskQueue, createYouTubeSyncManager, normalizeSyncError, reconcileNsapResult };

@@ -43,7 +43,7 @@ export function renderBadge(label, type = label) {
 }
 
 export function getUploadHealth(creator) {
-  const days = daysSinceUpload(creator.lastUploadDate);
+  const days = daysSinceUpload(creator.latestNsapUploadDate);
   const tone = uploadAgeTone(days);
   const label = tone === "good" ? "Healthy" : tone === "watch" ? "Watch" : tone === "bad" ? "Needs Follow-up" : "Unknown";
 
@@ -51,7 +51,7 @@ export function getUploadHealth(creator) {
     days,
     tone,
     label,
-    date: creator.lastUploadDate || "Unknown",
+    date: creator.latestNsapUploadDate || "Unknown",
     age: uploadAgeLabel(days),
   };
 }

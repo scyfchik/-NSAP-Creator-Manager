@@ -12,7 +12,7 @@ export function isFollowUpDue(dateValue, now = new Date()) {
 
 export function getCreatorStats(creators) {
   const uploadAges = creators
-    .map((creator) => daysSinceUpload(creator.lastUploadDate))
+    .map((creator) => daysSinceUpload(creator.latestNsapUploadDate))
     .filter((days) => days !== null);
 
   const totalUploadAge = uploadAges.reduce((sum, days) => sum + days, 0);
@@ -22,7 +22,7 @@ export function getCreatorStats(creators) {
 
   return {
     total: creators.length,
-    active: creators.filter((creator) => creator.status === "Active").length,
+    active: creators.filter((creator) => (daysSinceUpload(creator.latestNsapUploadDate) ?? Infinity) <= 14).length,
     followUp: creators.filter((creator) => creator.followUp === "Yes").length,
     collabMissing: creators.filter((creator) => creator.collabPosted !== "Yes").length,
     averageUploadAge,

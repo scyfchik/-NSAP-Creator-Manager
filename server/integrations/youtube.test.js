@@ -1,9 +1,12 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { matchNsapContent } = require("./nsapContentMatcher");
 const { RequestThrottle, YouTubeSyncError, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed } = require("./youtube");
-const { TaskQueue, createYouTubeSyncManager } = require("./youtubeSync");
+const { TaskQueue, createYouTubeSyncManager, reconcileNsapResult } = require("./youtubeSync");
 
 const CHANNEL_ID = "UC1234567890123456789012";
-const FEED = `<?xml version="1.0"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"><entry><yt:videoId>newest</yt:videoId><title>Newest Upload</title><published>2026-07-12T10:00:00+00:00</published><link rel="alternate" href="https://www.youtube.com/watch?v=newest"/></entry><entry><yt:videoId>older</yt:videoId><title>Older</title><published>2026-07-01T10:00:00+00:00</published></entry></feed>`;
+const FEED = `<?xml version="1.0"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/"><entry><yt:videoId>newest</yt:videoId><title>Minecraft survival episode 4</title><published>2026-07-12T10:00:00+00:00</published><link rel="alternate" href="https://www.youtube.com/watch?v=newest"/></entry><entry><yt:videoId>older</yt:videoId><title>Night Shift at Paulie's is TERRIFYING</title><published>2026-07-01T10:00:00+00:00</published><media:group><media:description>Roblox gameplay</media:description></media:group><link rel="alternate" href="https://www.youtube.com/watch?v=older"/></entry></feed>`;
 
 async function run() {
   assert.equal(parseYouTubeChannelUrl(`https://youtube.com/channel/${CHANNEL_ID}`).channelId, CHANNEL_ID);
@@ -12,9 +15,37 @@ async function run() {
   assert.equal(extractChannelIdFromHtml(`{"channelId":"${CHANNEL_ID}"}`), CHANNEL_ID);
   assert.equal(extractChannelIdFromHtml(`<link rel="alternate" href="https://www.youtube.com/feeds/videos.xml?channel_id=${CHANNEL_ID}">`), CHANNEL_ID);
 
+  assert.equal(matchNsapContent({ title: "Night Shift at Paulie's is TERRIFYING" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "Night Shift at Paul’s gameplay" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "Night Shift at Paul's gameplay" }).status, "matched");
+  assert.equal(matchNsapContent({ description: "#NightShiftAtPaulies" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "Paulies Roblox gameplay" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "NSAP update" }).status, "no_match");
+  assert.equal(matchNsapContent({ title: "Minecraft survival episode 4" }).status, "no_match");
+  assert.equal(matchNsapContent({ title: "NSAP Roblox update" }).status, "matched");
+
   const upload = parseYouTubeFeed(FEED);
-  assert.deepEqual(upload, { lastUploadDate: "2026-07-12", latestVideoTitle: "Newest Upload", latestVideoUrl: "https://www.youtube.com/watch?v=newest" });
+  assert.equal(upload.latestChannelVideoTitle, "Minecraft survival episode 4");
+  assert.equal(upload.latestChannelUploadDate, "2026-07-12");
+  assert.equal(upload.latestNsapVideoTitle, "Night Shift at Paulie's is TERRIFYING");
+  assert.equal(upload.latestNsapUploadDate, "2026-07-01");
+  assert.equal(upload.nsapMatchStatus, "matched");
+  const descriptionMatch = parseYouTubeFeed(FEED.replace("Night Shift at Paulie's is TERRIFYING", "Cooking tutorial").replace("Roblox gameplay", "#NightShiftAtPaulies"));
+  assert.equal(descriptionMatch.nsapMatchStatus, "matched");
+  assert.match(descriptionMatch.nsapMatchReason, /description hashtag/);
   assert.throws(() => parseYouTubeFeed("<feed></feed>"), (error) => error.code === "no_uploads");
+
+  const noMatch = parseYouTubeFeed(FEED.replace("Night Shift at Paulie's is TERRIFYING", "Cooking tutorial").replace("Roblox gameplay", "Easy dinner"));
+  const preserved = reconcileNsapResult({ latestNsapVideoTitle: "Previous NSAP", latestNsapVideoUrl: "https://youtube.com/watch?v=previous", latestNsapUploadDate: "2026-06-01" }, noMatch);
+  assert.equal(preserved.nsapMatchStatus, "no_match");
+  assert.equal(preserved.latestNsapUploadDate, "2026-06-01", "no_match must preserve previous NSAP activity");
+  ["status", "priority", "notes", "quickNote", "followUpDate", "dmSent", "collabPosted"]
+    .forEach((field) => assert.equal(Object.hasOwn(preserved, field), false, `${field} must remain outside the sync result`));
+
+  const manual = { nsapMatchStatus: "manual_rejected", nsapMatchReason: "Marked as unrelated", nsapDecisionVideoUploadDate: "2026-07-12", latestNsapUploadDate: "2026-06-01" };
+  assert.equal(reconcileNsapResult(manual, upload).nsapMatchStatus, "manual_rejected", "older matches must not replace manual decisions");
+  const newerMatch = { ...upload, latestNsapUploadDate: "2026-07-13" };
+  assert.equal(reconcileNsapResult(manual, newerMatch).nsapMatchStatus, "matched", "a newer match must replace the manual decision");
 
   const mappings = new Map();
   let fetchCount = 0;
@@ -47,7 +78,17 @@ async function run() {
   assert.deepEqual(order, [1, 2]);
 
   await testProgress();
+  assertFrontendUsesNsapDate();
   console.log("YouTube sync tests passed");
+}
+
+function assertFrontendUsesNsapDate() {
+  const root = path.resolve(__dirname, "../..");
+  ["src/ui/dashboard.js", "src/utils/creatorVisuals.js", "src/utils/calculations.js", "src/state/filters.js"].forEach((file) => {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.match(source, /latestNsapUploadDate/, `${file} must use latestNsapUploadDate`);
+    assert.doesNotMatch(source, /creator\.lastUploadDate|[ab]\.lastUploadDate/, `${file} must not use general lastUploadDate for activity`);
+  });
 }
 
 async function testProgress() {

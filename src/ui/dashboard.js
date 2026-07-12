@@ -14,21 +14,22 @@ function renderStats(creators) {
   const stats = getCreatorStats(creators);
   const today = localDateKey(new Date());
   const syncedToday = creators.filter((creator) => creator.lastSync && localDateKey(new Date(creator.lastSync)) === today).length;
-  const syncFailures = creators.filter((creator) => ["failed", "channel_not_found"].includes(creator.syncStatus)).length;
-  const manualUpdates = creators.filter((creator) => ["TikTok", "Twitch", "X", "X/Twitter"].includes(creator.platform)).length;
-  const uploadsToday = creators.filter((creator) => creator.lastUploadDate === today).length;
-  const inactiveUploads = creators.filter((creator) => (daysSinceUpload(creator.lastUploadDate) ?? 0) >= 31).length;
+  const syncFailures = creators.filter((creator) => creator.nsapMatchStatus === "sync_failed" || ["failed", "channel_not_found"].includes(creator.syncStatus)).length;
+  const nsapUploadsToday = creators.filter((creator) => creator.latestNsapUploadDate === today).length;
+  const activeNsapCreators = creators.filter((creator) => (daysSinceUpload(creator.latestNsapUploadDate) ?? Infinity) <= 14).length;
+  const noMatches = creators.filter((creator) => creator.nsapMatchStatus === "no_match").length;
+  const manualReview = creators.filter((creator) => creator.nsapMatchStatus === "no_match" && creator.latestChannelVideoUrl).length;
   const cards = [
     ["Total Creators", stats.total],
-    ["Active Creators", stats.active],
+    ["Active NSAP Creators", activeNsapCreators],
     ["Need Follow-up", stats.followUp],
     ["Collaboration Missing", stats.collabMissing],
     ["Average Upload Age", stats.averageUploadAge === null ? "Unknown" : `${stats.averageUploadAge} days`],
     ["Creators Synced Today", syncedToday],
+    ["NSAP Uploads Today", nsapUploadsToday],
+    ["No Matching NSAP Content", noMatches],
+    ["Manual Review Needed", manualReview],
     ["Sync Failures", syncFailures],
-    ["Needs Manual Update", manualUpdates],
-    ["Uploads Today", uploadsToday],
-    ["Inactive Uploads", inactiveUploads],
   ];
 
   document.getElementById("statsGrid").innerHTML = cards
@@ -79,8 +80,8 @@ function renderPlatformDistribution(creators) {
 
 function renderAttentionList(creators) {
   const attention = [...creators]
-    .filter((creator) => creator.followUp === "Yes" || creator.collabPosted !== "Yes" || (daysSinceUpload(creator.lastUploadDate) ?? 0) > 14)
-    .sort((a, b) => (daysSinceUpload(b.lastUploadDate) ?? -1) - (daysSinceUpload(a.lastUploadDate) ?? -1))
+    .filter((creator) => creator.followUp === "Yes" || creator.collabPosted !== "Yes" || (daysSinceUpload(creator.latestNsapUploadDate) ?? Infinity) > 14)
+    .sort((a, b) => (daysSinceUpload(b.latestNsapUploadDate) ?? Infinity) - (daysSinceUpload(a.latestNsapUploadDate) ?? Infinity))
     .slice(0, 6);
 
   const container = document.getElementById("attentionList");
@@ -92,7 +93,7 @@ function renderAttentionList(creators) {
 
   container.innerHTML = attention
     .map((creator) => {
-      const days = daysSinceUpload(creator.lastUploadDate);
+      const days = daysSinceUpload(creator.latestNsapUploadDate);
       return `
         <button class="attention-item" data-open-creator="${escapeHtml(creator.id)}" type="button">
           ${renderAvatar(creator)}
@@ -135,14 +136,14 @@ function getNotifications(creators) {
   const tomorrowKey = tomorrow.toISOString().slice(0, 10);
 
   return creators.flatMap((creator) => {
-    const days = daysSinceUpload(creator.lastUploadDate);
+    const days = daysSinceUpload(creator.latestNsapUploadDate);
     const items = [];
 
     if (days !== null && days <= 7) {
       items.push({
         creator,
         tone: "good",
-        title: `${creator.name} uploaded recently.`,
+        title: `${creator.name} posted NSAP content recently.`,
         detail: `${uploadAgeLabel(days)} on ${creator.platform}.`,
       });
     }
@@ -152,7 +153,7 @@ function getNotifications(creators) {
         creator,
         tone: "bad",
         title: `${creator.name} needs follow-up.`,
-        detail: `${uploadAgeLabel(days)} since last upload.`,
+        detail: `${uploadAgeLabel(days)} since last NSAP upload.`,
       });
     }
 

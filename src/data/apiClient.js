@@ -101,6 +101,12 @@ export const api = {
   syncYouTubeCreator(creatorId) {
     return request(`/api/creators/${encodeURIComponent(creatorId)}/sync/youtube`, { method: "POST", body: JSON.stringify({}) });
   },
+  setNsapDecision(creatorId, decision) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}/youtube/nsap-decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision }),
+    });
+  },
   startYouTubeSyncAll() {
     return request("/api/sync/youtube/all", { method: "POST", body: JSON.stringify({}) });
   },

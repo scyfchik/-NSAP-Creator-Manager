@@ -59,6 +59,30 @@ const migrations = [{
       resolved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `,
+}, {
+  id: "004_nsap_content_tracking",
+  postgres: `
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS latest_channel_video_title TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS latest_channel_video_url TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS latest_channel_upload_date DATE;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS latest_nsap_video_title TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS latest_nsap_video_url TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS latest_nsap_upload_date DATE;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS nsap_match_status TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS nsap_match_reason TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS nsap_matched_keyword TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS nsap_decision_video_title TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS nsap_decision_video_url TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS nsap_decision_video_upload_date DATE;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS nsap_decision_actor TEXT;
+    ALTER TABLE creators ADD COLUMN IF NOT EXISTS nsap_decision_at TIMESTAMPTZ;
+
+    UPDATE creators SET
+      latest_channel_video_title = COALESCE(latest_channel_video_title, latest_video_title),
+      latest_channel_video_url = COALESCE(latest_channel_video_url, latest_video_url),
+      latest_channel_upload_date = COALESCE(latest_channel_upload_date, last_upload);
+  `,
+  sqlite: "SELECT 1;",
 }];
 
 async function runMigrations(db) {

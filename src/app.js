@@ -437,6 +437,12 @@ function handleModalClick(event) {
   const syncYouTube = event.target.closest("[data-sync-youtube]");
   if (syncYouTube) {
     syncYouTubeCreator(syncYouTube.dataset.syncYoutube);
+    return;
+  }
+
+  const nsapDecision = event.target.closest("[data-nsap-decision]");
+  if (nsapDecision) {
+    setCreatorNsapDecision(nsapDecision.dataset.creatorId, nsapDecision.dataset.nsapDecision);
   }
 }
 
@@ -751,6 +757,31 @@ async function syncYouTubeCreator(creatorId) {
     showToast(succeeded ? "YouTube activity synced" : response.creator.syncError || "YouTube sync failed", succeeded ? "success" : "error");
   } catch (error) {
     setModalWorkflowState("failed", "Sync failed");
+    showToast(error.message, "error");
+  } finally {
+    pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
+  }
+}
+
+async function setCreatorNsapDecision(creatorId, decision) {
+  if (!session.permissions.canEdit) {
+    showToast("Manager role required", "error");
+    return;
+  }
+  pendingSaveRequests += 1;
+  setModalWorkflowState("saving", "Saving review...");
+  try {
+    const response = await api.setNsapDecision(creatorId, decision);
+    replaceCreator(response.creator);
+    savedAt = new Date().toISOString();
+    renderAll();
+    activeCreatorId = response.creator.id;
+    openCreatorModal(response.creator, session.permissions);
+    initializeModalDirty("timeline");
+    setModalWorkflowState("saved", "Review saved", true);
+    showToast(decision === "confirmed" ? "Marked as NSAP content" : "Marked as unrelated");
+  } catch (error) {
+    setModalWorkflowState("failed", "Review failed");
     showToast(error.message, "error");
   } finally {
     pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);

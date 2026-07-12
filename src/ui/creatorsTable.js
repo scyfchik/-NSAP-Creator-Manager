@@ -7,7 +7,7 @@ const columns = [
   ["platform", "Platform"],
   ["status", "Status"],
   ["priority", "Priority"],
-  ["days", "Upload Age"],
+  ["days", "NSAP Upload Age"],
   ["collabPosted", "Collab"],
   ["dmSent", "DM"],
   ["quickNote", "Quick Note"],

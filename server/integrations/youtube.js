@@ -1,4 +1,5 @@
 const { XMLParser } = require("fast-xml-parser");
+const { matchNsapContent } = require("./nsapContentMatcher");
 
 const RSS_TTL_MS = 15 * 60 * 1000;
 const CHANNEL_MAPPING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -123,17 +124,31 @@ function parseYouTubeFeed(xml, parser = new XMLParser({ ignoreAttributes: false,
   try { parsed = parser.parse(xml); } catch { throw new YouTubeSyncError("rss_unavailable", "YouTube RSS could not be parsed."); }
   const entries = parsed?.feed?.entry ? (Array.isArray(parsed.feed.entry) ? parsed.feed.entry : [parsed.feed.entry]) : [];
   if (!entries.length) throw new YouTubeSyncError("no_uploads", "No uploads found.");
-  const newest = entries
+  const uploads = entries
     .map((entry) => ({
       title: String(entry.title || "Untitled video"),
+      description: String(entry.group?.description || entry.description || ""),
       published: String(entry.published || ""),
       videoId: String(entry.videoId || ""),
       url: getAtomLink(entry.link) || (entry.videoId ? `https://www.youtube.com/watch?v=${entry.videoId}` : ""),
     }))
     .filter((entry) => !Number.isNaN(Date.parse(entry.published)))
-    .sort((a, b) => Date.parse(b.published) - Date.parse(a.published))[0];
+    .sort((a, b) => Date.parse(b.published) - Date.parse(a.published));
+  const newest = uploads[0];
   if (!newest) throw new YouTubeSyncError("no_uploads", "No uploads found.");
-  return { lastUploadDate: newest.published.slice(0, 10), latestVideoTitle: newest.title, latestVideoUrl: newest.url };
+  const nsapUpload = uploads.find((entry) => matchNsapContent(entry).matched);
+  const nsapMatch = nsapUpload ? matchNsapContent(nsapUpload) : matchNsapContent();
+  return {
+    latestChannelUploadDate: newest.published.slice(0, 10),
+    latestChannelVideoTitle: newest.title,
+    latestChannelVideoUrl: newest.url,
+    latestNsapUploadDate: nsapUpload?.published.slice(0, 10) || "",
+    latestNsapVideoTitle: nsapUpload?.title || "",
+    latestNsapVideoUrl: nsapUpload?.url || "",
+    nsapMatchStatus: nsapMatch.status,
+    nsapMatchReason: nsapMatch.reason,
+    nsapMatchedKeyword: nsapMatch.matchedKeyword,
+  };
 }
 
 function getAtomLink(link) {

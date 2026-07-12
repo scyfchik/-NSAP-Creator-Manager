@@ -17,8 +17,11 @@ const POSTGRES_CREATOR_COLUMNS = [
   "last_upload", "last_nsp_content", "collab_posted", "dm_sent", "notes", "quick_note", "follow_up_date",
   "discord_username", "discord_id", "roblox_username", "youtube_url", "tiktok_url", "twitch_url", "twitter_url",
   "category", "avatar", "subscribers", "views", "average_views", "latest_video", "latest_video_title",
-  "latest_video_url", "last_sync", "sync_status", "sync_error", "payload", "deleted", "deleted_at", "created_at",
-  "updated_at",
+  "latest_video_url", "last_sync", "sync_status", "sync_error", "latest_channel_video_title",
+  "latest_channel_video_url", "latest_channel_upload_date", "latest_nsap_video_title", "latest_nsap_video_url",
+  "latest_nsap_upload_date", "nsap_match_status", "nsap_match_reason", "nsap_matched_keyword",
+  "nsap_decision_video_title", "nsap_decision_video_url", "nsap_decision_video_upload_date", "nsap_decision_actor", "nsap_decision_at",
+  "payload", "deleted", "deleted_at", "created_at", "updated_at",
 ];
 
 function isPlainObject(value) {
@@ -43,16 +46,44 @@ function buildPostgresCreatorUpsert(c, now = new Date().toISOString()) {
     c.tiktokUrl || null, c.twitchUrl || null, c.twitterUrl || null, c.category || null, c.avatar || null,
     c.subscriberCount ?? null, c.views ?? null, c.averageViews ?? null, JSON.stringify(c.latestVideo ?? null),
     c.latestVideoTitle || null, c.latestVideoUrl || null, c.lastSync || null, c.syncStatus || null,
-    c.syncError || null, serializeCreatorPayload(c), Boolean(c.deleted), c.deletedAt || null,
+    c.syncError || null, c.latestChannelVideoTitle || null, c.latestChannelVideoUrl || null,
+    c.latestChannelUploadDate || null, c.latestNsapVideoTitle || null, c.latestNsapVideoUrl || null,
+    c.latestNsapUploadDate || null, c.nsapMatchStatus || null, c.nsapMatchReason || null,
+    c.nsapMatchedKeyword || null, c.nsapDecisionVideoTitle || null, c.nsapDecisionVideoUrl || null, c.nsapDecisionVideoUploadDate || null,
+    c.nsapDecisionActor || null, c.nsapDecisionAt || null, serializeCreatorPayload(c), Boolean(c.deleted), c.deletedAt || null,
     c.createdAt || now, c.updatedAt || now,
   ];
   const updateColumns = POSTGRES_CREATOR_COLUMNS.filter((column) => column !== "id" && column !== "created_at");
   const sql = `INSERT INTO creators (${POSTGRES_CREATOR_COLUMNS.join(",")}) VALUES (${params.map((_, index) => `$${index + 1}`).join(",")}) ON CONFLICT(id) DO UPDATE SET ${updateColumns.map((column) => `${column}=EXCLUDED.${column}`).join(",")}`;
   return { sql, params, columns: POSTGRES_CREATOR_COLUMNS };
 }
+
+function applyCreatorNsapDecision(creator, decision, user, decidedAt = new Date().toISOString()) {
+  if (!creator.latestChannelVideoUrl || !creator.latestChannelUploadDate) {
+    const error = new Error("Sync YouTube before reviewing NSAP content.");
+    error.status = 400;
+    throw error;
+  }
+  const confirmed = decision === "confirmed";
+  if (confirmed) {
+    creator.latestNsapVideoTitle = creator.latestChannelVideoTitle;
+    creator.latestNsapVideoUrl = creator.latestChannelVideoUrl;
+    creator.latestNsapUploadDate = creator.latestChannelUploadDate;
+  }
+  creator.nsapMatchStatus = confirmed ? "manual_confirmed" : "manual_rejected";
+  creator.nsapMatchReason = `${confirmed ? "Marked as NSAP content" : "Marked as unrelated"} by ${user?.username || "Manager"}`;
+  creator.nsapMatchedKeyword = "";
+  creator.nsapDecisionVideoTitle = creator.latestChannelVideoTitle;
+  creator.nsapDecisionVideoUrl = creator.latestChannelVideoUrl;
+  creator.nsapDecisionVideoUploadDate = creator.latestChannelUploadDate;
+  creator.nsapDecisionActor = user?.username || "Manager";
+  creator.nsapDecisionAt = decidedAt;
+  creator.updatedAt = decidedAt;
+  return creator;
+}
 function creatorSelect() {
   if (db.type === "postgres") {
-    return "payload, name, status, priority, last_upload, collab_posted, dm_sent, notes, quick_note, follow_up_date, discord_username, discord_id, roblox_username, youtube_url, tiktok_url, twitch_url, twitter_url, category, latest_video_title, latest_video_url, last_sync, sync_status, sync_error";
+    return "payload, name, status, priority, last_upload, collab_posted, dm_sent, notes, quick_note, follow_up_date, discord_username, discord_id, roblox_username, youtube_url, tiktok_url, twitch_url, twitter_url, category, latest_video_title, latest_video_url, last_sync, sync_status, sync_error, latest_channel_video_title, latest_channel_video_url, latest_channel_upload_date, latest_nsap_video_title, latest_nsap_video_url, latest_nsap_upload_date, nsap_match_status, nsap_match_reason, nsap_matched_keyword, nsap_decision_video_title, nsap_decision_video_url, nsap_decision_video_upload_date, nsap_decision_actor, nsap_decision_at";
   }
 
   return `payload,
@@ -69,7 +100,21 @@ function creatorSelect() {
     json_extract(payload, '$.latestVideoUrl') AS latest_video_url,
     json_extract(payload, '$.lastSync') AS last_sync,
     json_extract(payload, '$.syncStatus') AS sync_status,
-    json_extract(payload, '$.syncError') AS sync_error`;
+    json_extract(payload, '$.syncError') AS sync_error,
+    json_extract(payload, '$.latestChannelVideoTitle') AS latest_channel_video_title,
+    json_extract(payload, '$.latestChannelVideoUrl') AS latest_channel_video_url,
+    json_extract(payload, '$.latestChannelUploadDate') AS latest_channel_upload_date,
+    json_extract(payload, '$.latestNsapVideoTitle') AS latest_nsap_video_title,
+    json_extract(payload, '$.latestNsapVideoUrl') AS latest_nsap_video_url,
+    json_extract(payload, '$.latestNsapUploadDate') AS latest_nsap_upload_date,
+    json_extract(payload, '$.nsapMatchStatus') AS nsap_match_status,
+    json_extract(payload, '$.nsapMatchReason') AS nsap_match_reason,
+    json_extract(payload, '$.nsapMatchedKeyword') AS nsap_matched_keyword,
+    json_extract(payload, '$.nsapDecisionVideoTitle') AS nsap_decision_video_title,
+    json_extract(payload, '$.nsapDecisionVideoUrl') AS nsap_decision_video_url,
+    json_extract(payload, '$.nsapDecisionVideoUploadDate') AS nsap_decision_video_upload_date,
+    json_extract(payload, '$.nsapDecisionActor') AS nsap_decision_actor,
+    json_extract(payload, '$.nsapDecisionAt') AS nsap_decision_at`;
 }
 
 function dateValue(value) {
@@ -105,6 +150,20 @@ function mapCreatorRow(row) {
     lastSync: row.last_sync instanceof Date ? row.last_sync.toISOString() : row.last_sync || "",
     syncStatus: row.sync_status ?? "",
     syncError: row.sync_error ?? "",
+    latestChannelVideoTitle: row.latest_channel_video_title ?? "",
+    latestChannelVideoUrl: row.latest_channel_video_url ?? "",
+    latestChannelUploadDate: dateValue(row.latest_channel_upload_date),
+    latestNsapVideoTitle: row.latest_nsap_video_title ?? "",
+    latestNsapVideoUrl: row.latest_nsap_video_url ?? "",
+    latestNsapUploadDate: dateValue(row.latest_nsap_upload_date),
+    nsapMatchStatus: row.nsap_match_status ?? "",
+    nsapMatchReason: row.nsap_match_reason ?? "",
+    nsapMatchedKeyword: row.nsap_matched_keyword ?? "",
+    nsapDecisionVideoTitle: row.nsap_decision_video_title ?? "",
+    nsapDecisionVideoUrl: row.nsap_decision_video_url ?? "",
+    nsapDecisionVideoUploadDate: dateValue(row.nsap_decision_video_upload_date),
+    nsapDecisionActor: row.nsap_decision_actor ?? "",
+    nsapDecisionAt: row.nsap_decision_at instanceof Date ? row.nsap_decision_at.toISOString() : row.nsap_decision_at || "",
   };
 }
 
@@ -198,19 +257,54 @@ async function updateCreatorYouTubeSync({creatorId,result,user,ip}) {
   return db.transaction(async (tx) => {
     const creator = await getCreator(creatorId, tx);
     if (!creator || creator.deleted) return null;
-    const oldValue = { lastUploadDate: creator.lastUploadDate, latestVideoTitle: creator.latestVideoTitle, syncStatus: creator.syncStatus };
+    const oldValue = { latestChannelUploadDate: creator.latestChannelUploadDate, latestNsapUploadDate: creator.latestNsapUploadDate, nsapMatchStatus: creator.nsapMatchStatus, syncStatus: creator.syncStatus };
     creator.lastSync = result.lastSync || new Date().toISOString();
     creator.syncStatus = result.syncStatus;
     creator.syncError = result.syncError || "";
-    if (result.syncStatus === "synced") {
-      creator.lastUploadDate = result.lastUploadDate;
-      creator.latestVideoTitle = result.latestVideoTitle;
-      creator.latestVideoUrl = result.latestVideoUrl;
-      creator.latestVideo = result.latestVideoTitle;
-    }
+    const syncFields = [
+      "latestChannelVideoTitle", "latestChannelVideoUrl", "latestChannelUploadDate",
+      "latestNsapVideoTitle", "latestNsapVideoUrl", "latestNsapUploadDate",
+      "nsapMatchStatus", "nsapMatchReason", "nsapMatchedKeyword", "nsapDecisionVideoTitle",
+      "nsapDecisionVideoUrl", "nsapDecisionVideoUploadDate", "nsapDecisionActor", "nsapDecisionAt",
+    ];
+    syncFields.forEach((field) => {
+      if (Object.hasOwn(result, field)) creator[field] = result[field] || "";
+    });
     creator.updatedAt = new Date().toISOString();
     await upsertCreator(creator, tx);
     await insertAudit({ user, action: "creator.youtube.sync", creatorId, field: "youtubeSync", oldValue, newValue: result, ip }, tx);
+    return getCreator(creatorId, tx);
+  });
+}
+
+async function updateCreatorNsapDecision({creatorId,decision,user,ip}) {
+  return db.transaction(async (tx) => {
+    const creator = await getCreator(creatorId, tx);
+    if (!creator || creator.deleted) return null;
+    const oldValue = {
+      latestNsapVideoTitle: creator.latestNsapVideoTitle,
+      latestNsapVideoUrl: creator.latestNsapVideoUrl,
+      latestNsapUploadDate: creator.latestNsapUploadDate,
+      nsapMatchStatus: creator.nsapMatchStatus,
+    };
+    applyCreatorNsapDecision(creator, decision, user);
+    await upsertCreator(creator, tx);
+    await insertAudit({
+      user,
+      action: `creator.youtube.nsap.${creator.nsapMatchStatus}`,
+      creatorId,
+      field: "nsapMatchStatus",
+      oldValue,
+      newValue: {
+        status: creator.nsapMatchStatus,
+        videoTitle: creator.nsapDecisionVideoTitle,
+        videoUrl: creator.nsapDecisionVideoUrl,
+        videoUploadDate: creator.nsapDecisionVideoUploadDate,
+        actor: creator.nsapDecisionActor,
+        timestamp: creator.nsapDecisionAt,
+      },
+      ip,
+    }, tx);
     return getCreator(creatorId, tx);
   });
 }
@@ -249,4 +343,4 @@ function appendTimeline(c,e){c.timeline=Array.isArray(c.timeline)?c.timeline:[];
 function stringify(v){return v==null?null:typeof v==="string"?v:JSON.stringify(v);}
 function assertUnique(all,c){const norm=v=>String(v||"").trim().toLowerCase();if(all.some(x=>norm(x.name)===norm(c.name)||(c.channel&&norm(x.channel)===norm(c.channel))||(c.discordId&&x.discordId===c.discordId))){const e=new Error("A creator with this name, channel, or Discord ID already exists.");e.status=409;throw e;}}
 
-module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{buildPostgresCreatorUpsert,isPlainObject,serializeCreatorPayload}};
+module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorNsapDecision,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{applyCreatorNsapDecision,buildPostgresCreatorUpsert,isPlainObject,mapCreatorRow,serializeCreatorPayload}};

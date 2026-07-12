@@ -105,11 +105,12 @@ export function openAddCreatorModal() {
 }
 
 export function renderCreatorDetails(creator, permissions = { canEdit: false }) {
-  const days = daysSinceUpload(creator.lastUploadDate);
+  const days = daysSinceUpload(creator.latestNsapUploadDate);
   const channelUrl = getPrimaryChannelUrl(creator);
   const contactItems = renderContactItems(creator);
   const metricItems = renderMetricItems(creator);
-  const latestVideoUrl = getPlatformUrl(creator.latestVideoUrl, ["youtube.com", "youtu.be"]);
+  const latestNsapVideoUrl = getPlatformUrl(creator.latestNsapVideoUrl, ["youtube.com", "youtu.be"]);
+  const latestChannelVideoUrl = getPlatformUrl(creator.latestChannelVideoUrl, ["youtube.com", "youtu.be"]);
   const canYouTubeSync = Boolean(creator.youtubeUrl || creator.platform === "YouTube");
 
   document.getElementById("modalName").textContent = creator.name;
@@ -133,7 +134,9 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
         ${permissions.canEdit ? `<button class="button button-secondary" data-mark-dm-sent="${escapeHtml(creator.id)}" type="button">Mark DM Sent</button>` : ""}
         ${permissions.canEdit ? `<button class="button button-secondary" data-edit-profile="${escapeHtml(creator.id)}" type="button">Edit Profile</button>` : ""}
         ${permissions.canEdit && canYouTubeSync ? `<button class="button button-secondary" data-sync-youtube="${escapeHtml(creator.id)}" type="button">Sync YouTube</button>` : ""}
-        ${latestVideoUrl ? `<a class="button button-secondary" href="${escapeHtml(latestVideoUrl)}" target="_blank" rel="noreferrer">Open Latest Video</a>` : ""}
+        ${permissions.canEdit && latestChannelVideoUrl ? `<button class="button button-secondary" data-nsap-decision="confirmed" data-creator-id="${escapeHtml(creator.id)}" type="button">Mark as NSAP Content</button>` : ""}
+        ${permissions.canEdit && latestChannelVideoUrl ? `<button class="button button-secondary" data-nsap-decision="rejected" data-creator-id="${escapeHtml(creator.id)}" type="button">Mark as Unrelated</button>` : ""}
+        ${latestNsapVideoUrl ? `<a class="button button-secondary" href="${escapeHtml(latestNsapVideoUrl)}" target="_blank" rel="noreferrer">Open NSAP Video</a>` : ""}
         ${permissions.canDeleteCreators ? `<button class="button button-danger" data-delete-creator="${escapeHtml(creator.id)}" type="button">Delete Creator</button>` : ""}
       </div>
     </div>
@@ -144,13 +147,12 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
         <div class="modal-grid overview-grid">
         ${renderReadOnly("Quick Note", escapeHtml(formatOptional(creator.quickNote, "No quick note.")))}
         ${renderReadOnly("Follow-up", escapeHtml(formatOptional(creator.followUpDate, "No follow-up scheduled.")))}
-        ${renderReadOnly("Last Upload", escapeHtml(formatOptional(creator.lastUploadDate, "No upload date.")))}
-        ${renderReadOnly("Upload Health", `<b class="age age-${uploadAgeTone(days)}">${escapeHtml(uploadHealthLabel(days))} / ${escapeHtml(uploadAgeLabel(days))}</b>`)}
+        ${renderReadOnly("Last NSAP Upload", escapeHtml(formatOptional(creator.latestNsapUploadDate, "No matched NSAP upload.")))}
+        ${renderReadOnly("NSAP Upload Age", `<b class="age age-${uploadAgeTone(days)}">${escapeHtml(uploadHealthLabel(days))} / ${escapeHtml(uploadAgeLabel(days))}</b>`)}
         ${renderReadOnly("Collaboration", escapeHtml(creator.collabPosted === "Yes" ? "Posted" : "Not posted"))}
         ${renderReadOnly("DM Status", escapeHtml(creator.dmSent === "Yes" ? "Sent" : "Not sent"))}
         ${renderReadOnly("Last Sync", escapeHtml(relativeSyncLabel(creator.lastSync)))}
         ${renderReadOnly("Sync Status", escapeHtml(getSyncStatusLabel(creator)))}
-        ${creator.latestVideoTitle ? renderReadOnly("Latest Video", escapeHtml(creator.latestVideoTitle)) : ""}
         </div>
       </section>
 
@@ -159,6 +161,28 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
         ${contactItems ? `<div class="compact-detail-list">${contactItems}</div>` : `<p class="empty-state compact-empty">No social channels added.</p>`}
       </section>
     </div>
+
+    <section class="modal-section profile-section">
+      <h4>NSAP Activity</h4>
+      <div class="modal-grid overview-grid">
+        ${renderReadOnly("Latest NSAP Video", escapeHtml(formatOptional(creator.latestNsapVideoTitle, "No matched NSAP video.")))}
+        ${renderReadOnly("Match Status", escapeHtml(getNsapMatchStatusLabel(creator.nsapMatchStatus)))}
+        ${renderReadOnly("Match Reason", escapeHtml(formatOptional(creator.nsapMatchReason, "Not reviewed yet.")))}
+        ${creator.nsapMatchedKeyword ? renderReadOnly("Matched Keyword", escapeHtml(creator.nsapMatchedKeyword)) : ""}
+        ${creator.nsapDecisionActor ? renderReadOnly("Manual Decision", escapeHtml(`${creator.nsapDecisionActor} / ${creator.nsapDecisionAt || "Unknown time"}`)) : ""}
+      </div>
+    </section>
+
+    ${(creator.latestChannelVideoTitle || creator.latestChannelUploadDate) ? `
+      <section class="modal-section profile-section">
+        <h4>General YouTube</h4>
+        <div class="modal-grid overview-grid">
+          ${renderReadOnly("Latest Channel Upload", escapeHtml(formatOptional(creator.latestChannelUploadDate, "Unknown")))}
+          ${renderReadOnly("Latest Channel Video", escapeHtml(formatOptional(creator.latestChannelVideoTitle, "Unknown")))}
+          ${latestChannelVideoUrl ? renderReadOnly("Channel Video", `<a href="${escapeHtml(latestChannelVideoUrl)}" target="_blank" rel="noreferrer">Open latest channel video</a>`) : ""}
+        </div>
+      </section>
+    ` : ""}
 
     <section class="modal-section profile-section">
       <h4>Notes</h4>
@@ -394,6 +418,18 @@ function getSyncStatusLabel(creator) {
   if (creator.syncStatus === "manual") return "Manual Update Required";
   if (creator.syncStatus === "failed") return creator.syncError || "Sync failed";
   return "Not synced";
+}
+
+function getNsapMatchStatusLabel(status) {
+  const labels = {
+    matched: "Matched",
+    no_match: "No match",
+    manual_confirmed: "Manually confirmed",
+    manual_rejected: "Manually rejected",
+    sync_failed: "Sync failed",
+    unsupported: "Unsupported platform",
+  };
+  return labels[status] || "Not reviewed";
 }
 
 function renderInput(name, label, value = "", type = "text", required = false) {

@@ -51,7 +51,7 @@ function compareCreators(a, b, sort) {
   const direction = sort.direction === "desc" ? -1 : 1;
 
   if (sort.field === "days") {
-    return direction * ((daysSinceUpload(a.lastUploadDate) ?? -1) - (daysSinceUpload(b.lastUploadDate) ?? -1));
+    return direction * ((daysSinceUpload(a.latestNsapUploadDate) ?? -1) - (daysSinceUpload(b.latestNsapUploadDate) ?? -1));
   }
 
   if (sort.field === "priority") {
