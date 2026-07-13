@@ -16,7 +16,6 @@ const {
   createSession,
   getAuditLog,
   getCreators,
-  updateCreatorYouTubeSync,
   upsertUser,
 } = require("./db");
 
@@ -39,24 +38,7 @@ async function run() {
     const creator = (await getCreators()).find((item) => item.platform === "YouTube");
     assert.ok(creator, "seed data must contain a YouTube creator");
     creator.youtubeUrl = `https://www.youtube.com/channel/${CHANNEL_ID}`;
-    const synced = await updateCreatorYouTubeSync({
-      creatorId: creator.id,
-      user,
-      ip: "127.0.0.1",
-      result: {
-        latestChannelVideoTitle: "Night Shift at Paul's contract candidate",
-        latestChannelVideoUrl: PRIMARY_URL,
-        latestChannelUploadDate: "2026-07-12",
-        latestNsapVideoTitle: "Night Shift at Paul's contract candidate",
-        latestNsapVideoUrl: PRIMARY_URL,
-        latestNsapUploadDate: "2026-07-12",
-        nsapMatchStatus: "matched",
-        nsapMatchReason: "Contract candidate",
-        nsapMatchedKeyword: "night shift at paul's",
-        syncStatus: "synced",
-      },
-    });
-    await require("./db").updateCreatorProfile({
+    const synced = await require("./db").updateCreatorProfile({
       creatorId: creator.id,
       updates: { youtubeUrl: creator.youtubeUrl },
       user,
@@ -75,17 +57,38 @@ async function run() {
       Cookie: `nsap_session=${sessionToken}; nsap_csrf=${csrfToken}`,
       "x-csrf-token": csrfToken,
     };
-    const endpoint = `${baseUrl}/api/creators/${encodeURIComponent(synced.id)}/youtube/nsap-decision`;
-    const candidate = {
-      videoTitle: synced.latestNsapVideoTitle,
-      videoUrl: synced.latestNsapVideoUrl,
-      videoUploadDate: synced.latestNsapUploadDate,
-    };
+    const creatorPath = `${baseUrl}/api/creators/${encodeURIComponent(synced.id)}`;
+    const endpoint = `${creatorPath}/youtube/nsap-decision`;
+    const syncResult = await postJson(originalFetch, `${creatorPath}/sync/youtube`, headers, {});
+    assert.equal(syncResult.status, 200);
+    assert.equal(syncResult.body.review.candidate.url, PRIMARY_URL, "sync must start at the best automatic match");
+    const candidatePayload = (candidate) => ({ videoTitle: candidate.title, videoUrl: candidate.url, videoUploadDate: candidate.uploadDate });
 
-    await assertReviewStatus(originalFetch, endpoint, headers, { decision: NSAP_REVIEW_DECISION.CONFIRM, ...candidate }, 200, "Mark as NSAP Content");
-    await assertReviewStatus(originalFetch, endpoint, headers, { decision: NSAP_REVIEW_DECISION.REJECT, ...candidate }, 200, "Mark as Unrelated");
-    await assertReviewStatus(originalFetch, endpoint, headers, { decision: NSAP_REVIEW_DECISION.CLEAR }, 200, "Clear Review");
-    await assertReviewStatus(originalFetch, endpoint, headers, { decision: NSAP_REVIEW_DECISION.CONFIRM, ...candidate }, 200, "Prepare Review Undo");
+    const rejected = await postJson(originalFetch, endpoint, headers, { decision: NSAP_REVIEW_DECISION.REJECT, ...candidatePayload(syncResult.body.review.candidate) });
+    assert.equal(rejected.status, 200, `Mark as Unrelated returned ${rejected.status}`);
+    assert.equal(rejected.body.review.candidate.url, "https://www.youtube.com/watch?v=contract-older", "reject must advance in the same response");
+    assert.equal(rejected.body.review.checkedCount, 1);
+
+    const resynced = await postJson(originalFetch, `${creatorPath}/sync/youtube`, headers, {});
+    assert.equal(resynced.status, 200);
+    assert.equal(resynced.body.review.candidate.url, "https://www.youtube.com/watch?v=contract-older", "a permanently rejected video must not reappear after sync");
+
+    const auditCountBeforeSkip = (await getAuditLog()).length;
+    const skipped = await postJson(originalFetch, `${creatorPath}/youtube/review-next`, headers, {});
+    assert.equal(skipped.status, 200);
+    assert.equal(skipped.body.review.status, "exhausted");
+    assert.equal((await getAuditLog()).length, auditCountBeforeSkip, "temporary Show Next must not create an audit record");
+
+    const reloaded = await originalFetch(`${creatorPath}/youtube/review-candidate`, { headers });
+    const reloadedBody = await reloaded.json();
+    assert.equal(reloadedBody.review.status, "exhausted", "F5-style GET must keep current in-process navigation");
+
+    const cleared = await postJson(originalFetch, endpoint, headers, { decision: NSAP_REVIEW_DECISION.CLEAR });
+    assert.equal(cleared.status, 200, "Clear Review must return 200");
+    assert.equal(cleared.body.review.candidate.url, PRIMARY_URL, "Clear must restore the first candidate");
+    const confirmed = await postJson(originalFetch, endpoint, headers, { decision: NSAP_REVIEW_DECISION.CONFIRM, ...candidatePayload(cleared.body.review.candidate) });
+    assert.equal(confirmed.status, 200, "Mark as NSAP Content must return 200");
+    assert.equal(confirmed.body.review.status, "confirmed");
     await assertReviewStatus(originalFetch, endpoint, headers, { decision: NSAP_REVIEW_DECISION.UNDO }, 200, "Review Undo");
     await assertReviewStatus(originalFetch, endpoint, headers, { decision: "rejected" }, 400, "legacy rejected value");
 
@@ -111,6 +114,11 @@ function listen(app) {
 async function assertReviewStatus(fetchImpl, endpoint, headers, payload, expected, label) {
   const result = await fetchImpl(endpoint, { method: "POST", headers, body: JSON.stringify(payload) });
   assert.equal(result.status, expected, `${label} returned ${result.status}: ${await result.text()}`);
+}
+
+async function postJson(fetchImpl, endpoint, headers, payload) {
+  const response = await fetchImpl(endpoint, { method: "POST", headers, body: JSON.stringify(payload) });
+  return { status: response.status, body: await response.json() };
 }
 
 function readCookie(header, name) {

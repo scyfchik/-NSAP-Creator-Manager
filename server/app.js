@@ -167,15 +167,25 @@ async function createApp() {
   }));
 
   app.post("/api/creators/:id/sync/youtube", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
-    const creator = await youtubeSync.syncCreator(req.params.id, req.user, req.ip);
-    if (!creator) return res.status(404).json({ error: "Creator not found" });
-    res.json({ creator });
+    const result = await youtubeSync.syncCreator(req.params.id, req.user, req.ip);
+    if (!result) return res.status(404).json({ error: "Creator not found" });
+    res.json(result);
+  }));
+
+  app.get("/api/creators/:id/youtube/review-candidate", requireCreatorEditor, asyncHandler(async (req, res) => {
+    res.json({ review: youtubeSync.getReviewState(req.params.id) });
+  }));
+
+  app.post("/api/creators/:id/youtube/review-next", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
+    const result = await youtubeSync.showNextCandidate(req.params.id);
+    if (!result) return res.status(404).json({ error: "Creator not found" });
+    res.json(result);
   }));
 
   app.post("/api/creators/:id/youtube/nsap-decision", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
-    const creator = await youtubeSync.reviewCreator(req.params.id, validateNsapDecision(req.body), req.user, req.ip);
-    if (!creator) return res.status(404).json({ error: "Creator not found" });
-    res.json({ creator });
+    const result = await youtubeSync.reviewCreator(req.params.id, validateNsapDecision(req.body), req.user, req.ip);
+    if (!result) return res.status(404).json({ error: "Creator not found" });
+    res.json(result);
   }));
 
   app.post("/api/sync/youtube/all", requireCsrf, requireOwner, asyncHandler(async (req, res) => {

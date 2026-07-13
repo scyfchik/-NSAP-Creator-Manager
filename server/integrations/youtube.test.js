@@ -186,23 +186,28 @@ async function testExactReviewFlow() {
     getCreatorNsapReviews: async () => persistedReviews,
     getYouTubeChannelMapping: async () => null,
     setYouTubeChannelMapping: async () => {},
+    updateCreatorYouTubeSync: async ({ result }) => Object.assign(creator, result),
     updateCreatorNsapDecision: async (args) => {
       updateArgs = args;
       return { ...creator, ...args.automaticResult };
     },
   };
   const manager = createYouTubeSyncManager({ dbApi, minRequestIntervalMs: 0, fetchImpl: async () => response(FEED) });
+  const synced = await manager.syncCreator(creator.id, { username: "Manager" }, "127.0.0.1");
+  const candidate = synced.review.candidate;
   const review = {
     decision: NSAP_REVIEW_DECISION.REJECT,
-    videoTitle: creator.latestNsapVideoTitle,
-    videoUrl: creator.latestNsapVideoUrl,
-    videoUploadDate: creator.latestNsapUploadDate,
+    videoTitle: candidate.title,
+    videoUrl: candidate.url,
+    videoUploadDate: candidate.uploadDate,
   };
   const result = await manager.reviewCreator(creator.id, review, { username: "Manager" }, "127.0.0.1");
-  assert.equal(updateArgs.review.videoUrl, creator.latestNsapVideoUrl);
+  assert.equal(updateArgs.review.videoUrl, candidate.url);
+  assert.equal(updateArgs.expectedCandidate.url, candidate.url);
   assert.equal(updateArgs.automaticResult.nsapMatchStatus, "no_match");
   assert.equal(updateArgs.automaticResult.latestNsapVideoUrl, "");
-  assert.equal(result.nsapMatchStatus, "no_match");
+  assert.equal(result.creator.nsapMatchStatus, "no_match");
+  assert.equal(result.review.candidate.title, "Minecraft survival episode 4");
 }
 
 function response(body, status = 200) {

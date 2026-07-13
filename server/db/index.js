@@ -299,11 +299,11 @@ async function getCreatorNsapReviews(creatorId, tx = db) {
   return tx.all(`SELECT * FROM creator_nsap_video_reviews WHERE creator_id=${marker(1)} ORDER BY updated_at DESC, id DESC`, [creatorId]);
 }
 
-async function updateCreatorNsapDecision({creatorId,review,automaticResult,user,ip}) {
+async function updateCreatorNsapDecision({creatorId,review,automaticResult,expectedCandidate,user,ip}) {
   return db.transaction(async (tx) => {
     const creator = await getCreator(creatorId, tx);
     if (!creator || creator.deleted) return null;
-    if (review.decision !== NSAP_REVIEW_DECISION.CLEAR && !isCurrentNsapCandidate(creator, review)) {
+    if (review.decision !== NSAP_REVIEW_DECISION.CLEAR && !isSameNsapCandidate(expectedCandidate, review)) {
       const error = new Error("The selected video is stale. Refresh the profile and review the current candidate.");
       error.status = 409;
       throw error;
@@ -343,11 +343,11 @@ async function updateCreatorNsapDecision({creatorId,review,automaticResult,user,
   });
 }
 
-function isCurrentNsapCandidate(creator, review) {
-  return [
-    [creator.latestNsapVideoTitle, creator.latestNsapVideoUrl, creator.latestNsapUploadDate],
-    [creator.latestChannelVideoTitle, creator.latestChannelVideoUrl, creator.latestChannelUploadDate],
-  ].some(([title, url, date]) => title === review.videoTitle && url === review.videoUrl && date === review.videoUploadDate);
+function isSameNsapCandidate(candidate, review) {
+  return Boolean(candidate)
+    && candidate.title === review.videoTitle
+    && candidate.url === review.videoUrl
+    && candidate.uploadDate === review.videoUploadDate;
 }
 
 async function getYouTubeChannelMapping(cacheKey) {
@@ -384,4 +384,4 @@ function appendTimeline(c,e){c.timeline=Array.isArray(c.timeline)?c.timeline:[];
 function stringify(v){return v==null?null:typeof v==="string"?v:JSON.stringify(v);}
 function assertUnique(all,c){const norm=v=>String(v||"").trim().toLowerCase();if(all.some(x=>norm(x.name)===norm(c.name)||(c.channel&&norm(x.channel)===norm(c.channel))||(c.discordId&&x.discordId===c.discordId))){const e=new Error("A creator with this name, channel, or Discord ID already exists.");e.status=409;throw e;}}
 
-module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreatorNsapReviews,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorNsapDecision,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{applyCreatorNsapReview,buildPostgresCreatorUpsert,isCurrentNsapCandidate,isPlainObject,mapCreatorRow,serializeCreatorPayload}};
+module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreatorNsapReviews,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorNsapDecision,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{applyCreatorNsapReview,buildPostgresCreatorUpsert,isPlainObject,isSameNsapCandidate,mapCreatorRow,serializeCreatorPayload}};

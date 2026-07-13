@@ -1,4 +1,4 @@
-import { t } from "../i18n/index.js";
+import { getLanguage, t } from "../i18n/index.js";
 
 const DAY_MS = 86400000;
 
@@ -59,4 +59,17 @@ export function relativeSyncLabel(value, now = new Date()) {
   if (hours < 24) return t("date.hoursAgo", { count: hours, suffix: hours === 1 ? "" : "s" });
   const days = Math.floor(hours / 24);
   return t("date.daysAgo", { count: days, suffix: days === 1 ? "" : "s" });
+}
+
+export function formatLocalizedDate(value) {
+  if (!value) return t("common.unknown");
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return t("common.unknown");
+  return new Intl.DateTimeFormat(getLanguage() === "ru" ? "ru-RU" : "en-US", { dateStyle: "medium" }).format(date);
+}
+
+export function formatLocalizedDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return t("common.unknown");
+  return new Intl.DateTimeFormat(getLanguage() === "ru" ? "ru-RU" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }

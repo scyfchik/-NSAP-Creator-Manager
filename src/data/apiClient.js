@@ -104,6 +104,12 @@ export const api = {
   syncYouTubeCreator(creatorId) {
     return request(`/api/creators/${encodeURIComponent(creatorId)}/sync/youtube`, { method: "POST", body: JSON.stringify({}) });
   },
+  getNsapReviewState(creatorId) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}/youtube/review-candidate`);
+  },
+  showNextNsapCandidate(creatorId) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}/youtube/review-next`, { method: "POST", body: JSON.stringify({}) });
+  },
   setNsapDecision(creatorId, payload) {
     if (!payload || !isNsapReviewDecision(payload.decision)) {
       throw new TypeError(t("error.invalidNsapReviewDecision"));

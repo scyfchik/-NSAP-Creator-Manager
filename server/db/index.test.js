@@ -128,15 +128,15 @@ function run() {
   assert.equal(manuallyRejected.latestNsapVideoTitle, "Older valid NSAP video", "rejection must recalculate to the next valid RSS match");
   assert.equal(manuallyRejected.nsapDecisionVideoUrl, rejectedReview.videoUrl, "the rejected exact URL must remain recorded");
 
-  assert.equal(__testing.isCurrentNsapCandidate({
-    latestChannelVideoTitle: rejectedReview.videoTitle,
-    latestChannelVideoUrl: rejectedReview.videoUrl,
-    latestChannelUploadDate: rejectedReview.videoUploadDate,
+  assert.equal(__testing.isSameNsapCandidate({
+    title: rejectedReview.videoTitle,
+    url: rejectedReview.videoUrl,
+    uploadDate: rejectedReview.videoUploadDate,
   }, rejectedReview), true);
-  assert.equal(__testing.isCurrentNsapCandidate({
-    latestChannelVideoTitle: rejectedReview.videoTitle,
-    latestChannelVideoUrl: "https://www.youtube.com/watch?v=different",
-    latestChannelUploadDate: rejectedReview.videoUploadDate,
+  assert.equal(__testing.isSameNsapCandidate({
+    title: rejectedReview.videoTitle,
+    url: "https://www.youtube.com/watch?v=different",
+    uploadDate: rejectedReview.videoUploadDate,
   }, rejectedReview), false, "a stale or substituted candidate must be rejected");
 
   const cleared = __testing.applyCreatorNsapReview({ ...manuallyRejected }, {

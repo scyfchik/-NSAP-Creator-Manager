@@ -7,7 +7,6 @@ import { renderDashboard } from "./ui/dashboard.js";
 import { renderCreatorsTable } from "./ui/creatorsTable.js";
 import { renderFilterOptions } from "./ui/filters.js";
 import {
-  getNsapReviewCandidate,
   getFormValues,
   openAddCreatorModal,
   openCreatorModal,
@@ -62,6 +61,7 @@ let quickNoteDrafts = new Map();
 let quickNoteSaveStates = new Map();
 let quickNoteSaveVersions = new Map();
 let quickNoteFadeTimers = new Map();
+const nsapReviewStates = new Map();
 let pendingSaveRequests = 0;
 let searchTimer = 0;
 let modalDirty = false;
@@ -218,7 +218,7 @@ function wireEvents() {
     renderAll();
     const creator = activeCreatorId ? getCreatorById(activeCreatorId) : null;
     if (creator && document.getElementById("creatorDialog").open && modalMode === "timeline") {
-      openCreatorModal(creator, session.permissions);
+      openCreatorModal(creator, session.permissions, nsapReviewStates.get(creator.id));
       initializeModalDirty("timeline");
     }
   });
@@ -340,8 +340,9 @@ function handleOpenCreatorClick(event) {
   }
 
   activeCreatorId = creator.id;
-  openCreatorModal(creator, session.permissions);
+  openCreatorModal(creator, session.permissions, nsapReviewStates.get(creator.id));
   initializeModalDirty("timeline");
+  loadNsapReviewState(creator.id);
 }
 
 function handleModalEdit(event) {
@@ -394,7 +395,7 @@ function handleModalClick(event) {
     }
     const creator = getCreatorById(cancelEdit.dataset.cancelProfileEdit);
     if (creator) {
-      renderCreatorDetails(creator, session.permissions);
+      renderCreatorDetails(creator, session.permissions, nsapReviewStates.get(creator.id));
       initializeModalDirty("timeline");
     }
     return;
@@ -457,6 +458,12 @@ function handleModalClick(event) {
   const nsapDecision = event.target.closest("[data-nsap-review]");
   if (nsapDecision) {
     setCreatorNsapDecision(nsapDecision.dataset.creatorId, nsapDecision.dataset.nsapReview);
+    return;
+  }
+
+  const nsapNext = event.target.closest("[data-nsap-next]");
+  if (nsapNext) {
+    showNextNsapCandidate(nsapNext.dataset.nsapNext);
     return;
   }
 }
@@ -646,7 +653,7 @@ async function saveCreatorProfile(creatorId, button) {
     resetModalDirty();
     renderAll();
     activeCreatorId = response.creator.id;
-    openCreatorModal(response.creator, session.permissions);
+    openCreatorModal(response.creator, session.permissions, nsapReviewStates.get(response.creator.id));
     initializeModalDirty("timeline");
     setModalWorkflowState("saved", t("save.saved"), true);
     showToast(t("message.changesSaved"));
@@ -692,7 +699,7 @@ async function addTimelineEntry(creatorId, button) {
     const response = await api.addTimelineEntry(creatorId, { type, message });
     replaceCreator(response.creator);
     resetModalDirty();
-    renderCreatorDetails(response.creator, session.permissions);
+    renderCreatorDetails(response.creator, session.permissions, nsapReviewStates.get(response.creator.id));
     initializeModalDirty("timeline");
     setModalWorkflowState("saved", t("save.saved"), true);
     showToast(t("message.changesSaved"));
@@ -722,7 +729,7 @@ async function copyCreatorReminder(creatorId) {
         message: template.timeline,
       });
       replaceCreator(response.creator);
-      renderCreatorDetails(response.creator, session.permissions);
+      renderCreatorDetails(response.creator, session.permissions, nsapReviewStates.get(response.creator.id));
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -741,7 +748,7 @@ async function markCreatorDmSent(creatorId) {
     const response = await api.markDmSent(creatorId);
     replaceCreator(response.creator);
     renderAll();
-    openCreatorModal(response.creator, session.permissions);
+    openCreatorModal(response.creator, session.permissions, nsapReviewStates.get(response.creator.id));
     setModalWorkflowState("saved", t("save.saved"), true);
     showToast(t("message.dmMarkedSent"));
   } catch (error) {
@@ -762,16 +769,54 @@ async function syncYouTubeCreator(creatorId) {
   try {
     const response = await api.syncYouTubeCreator(creatorId);
     replaceCreator(response.creator);
+    nsapReviewStates.set(creatorId, response.review);
     savedAt = new Date().toISOString();
     renderAll();
     activeCreatorId = response.creator.id;
-    openCreatorModal(response.creator, session.permissions);
+    openCreatorModal(response.creator, session.permissions, response.review);
     initializeModalDirty("timeline");
     const succeeded = response.creator.syncStatus === "synced";
     setModalWorkflowState(succeeded ? "saved" : "failed", succeeded ? t("sync.synced") : t("sync.failed"), succeeded);
     showToast(succeeded ? t("sync.activitySynced") : response.creator.syncError || t("sync.failed"), succeeded ? "success" : "error");
   } catch (error) {
     setModalWorkflowState("failed", t("sync.failed"));
+    showToast(error.message, "error");
+  } finally {
+    pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
+  }
+}
+
+async function loadNsapReviewState(creatorId) {
+  if (!session.permissions.canEdit) return;
+  try {
+    const response = await api.getNsapReviewState(creatorId);
+    nsapReviewStates.set(creatorId, response.review);
+    const creator = getCreatorById(creatorId);
+    const dialog = document.getElementById("creatorDialog");
+    if (creator && activeCreatorId === creatorId && dialog.open && modalMode === "timeline") {
+      renderCreatorDetails(creator, session.permissions, response.review);
+      initializeModalDirty("timeline");
+    }
+  } catch (error) {
+    console.error("Unable to load NSAP review candidate", error);
+  }
+}
+
+async function showNextNsapCandidate(creatorId) {
+  if (!session.permissions.canEdit) {
+    showToast(t("error.managerRequired"), "error");
+    return;
+  }
+  pendingSaveRequests += 1;
+  setModalWorkflowState("saving", t("review.loadingNext"));
+  try {
+    const response = await api.showNextNsapCandidate(creatorId);
+    nsapReviewStates.set(creatorId, response.review);
+    renderCreatorDetails(response.creator, session.permissions, response.review);
+    initializeModalDirty("timeline");
+    setModalWorkflowState("saved", t("review.skipped"), true);
+  } catch (error) {
+    setModalWorkflowState("failed", t("review.failed"));
     showToast(error.message, "error");
   } finally {
     pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
@@ -785,7 +830,7 @@ async function setCreatorNsapDecision(creatorId, decision) {
   }
 
   const creator = getCreatorById(creatorId);
-  const candidate = creator ? getNsapReviewCandidate(creator) : null;
+  const candidate = nsapReviewStates.get(creatorId)?.candidate || null;
   if (decision !== NSAP_REVIEW_DECISION.CLEAR && !candidate) {
     showToast(t("review.noCandidate"), "error");
     return;
@@ -802,12 +847,13 @@ async function setCreatorNsapDecision(creatorId, decision) {
 
   const payload = decision === NSAP_REVIEW_DECISION.CLEAR
     ? { decision }
-    : { decision, ...candidate };
+    : { decision, videoTitle: candidate.title, videoUrl: candidate.url, videoUploadDate: candidate.uploadDate };
   pendingSaveRequests += 1;
   setModalWorkflowState("saving", t("review.saving"));
   try {
     const response = await api.setNsapDecision(creatorId, payload);
     replaceCreator(response.creator);
+    nsapReviewStates.set(creatorId, response.review);
     if (decision === NSAP_REVIEW_DECISION.CLEAR) {
       undoStack = undoStack.filter((snapshot) => snapshot.kind !== "nsapReview" || snapshot.creatorId !== creatorId);
     } else {
@@ -817,7 +863,7 @@ async function setCreatorNsapDecision(creatorId, decision) {
     savedAt = new Date().toISOString();
     renderAll();
     activeCreatorId = response.creator.id;
-    openCreatorModal(response.creator, session.permissions);
+    openCreatorModal(response.creator, session.permissions, response.review);
     initializeModalDirty("timeline");
     setModalWorkflowState("saved", t("save.saved"), true);
     const toastKey = decision === NSAP_REVIEW_DECISION.CONFIRM
@@ -935,7 +981,8 @@ async function undoLastEdit() {
     if (snapshot.kind === "nsapReview") {
       activeCreatorId = response.creator.id;
       if (document.getElementById("creatorDialog").open) {
-        openCreatorModal(response.creator, session.permissions);
+        nsapReviewStates.set(response.creator.id, response.review);
+        openCreatorModal(response.creator, session.permissions, response.review);
         initializeModalDirty("timeline");
       }
       showToast(t("review.cleared"));

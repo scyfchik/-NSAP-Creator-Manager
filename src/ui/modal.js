@@ -1,4 +1,4 @@
-import { relativeSyncLabel } from "../utils/dates.js";
+import { formatLocalizedDate, formatLocalizedDateTime, relativeSyncLabel } from "../utils/dates.js";
 import { getNsapHealth, renderAvatar, renderBadge } from "../utils/creatorVisuals.js";
 import { escapeHtml, formatNumber, formatOptional, safeUrl } from "../utils/format.js";
 import { t } from "../i18n/index.js";
@@ -65,9 +65,9 @@ const profileFields = [
   ["notes", "profile.notes", "textarea"],
 ];
 
-export function openCreatorModal(creator, permissions = { canEdit: false }) {
+export function openCreatorModal(creator, permissions = { canEdit: false }, reviewState) {
   const dialog = document.getElementById("creatorDialog");
-  renderCreatorDetails(creator, permissions);
+  renderCreatorDetails(creator, permissions, reviewState);
   if (!dialog.open) {
     dialog.showModal();
   }
@@ -106,12 +106,11 @@ export function openAddCreatorModal() {
   }
 }
 
-export function renderCreatorDetails(creator, permissions = { canEdit: false }) {
+export function renderCreatorDetails(creator, permissions = { canEdit: false }, reviewState = { status: "not_loaded", candidate: null, hasNextCandidate: false, checkedCount: 0 }) {
   const health = getNsapHealth(creator);
   const channelUrl = getPrimaryChannelUrl(creator);
   const contactItems = renderContactItems(creator);
   const metricItems = renderMetricItems(creator);
-  const reviewCandidate = getNsapReviewCandidate(creator);
   const latestNsapVideoUrl = getPlatformUrl(creator.latestNsapVideoUrl, ["youtube.com", "youtu.be"]);
   const latestChannelVideoUrl = getPlatformUrl(creator.latestChannelVideoUrl, ["youtube.com", "youtu.be"]);
   const canYouTubeSync = Boolean(creator.youtubeUrl || creator.platform === "YouTube");
@@ -168,13 +167,13 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }) 
       <div class="modal-grid overview-grid">
         ${renderReadOnly(t("profile.latestNsapVideo"), escapeHtml(formatOptional(creator.latestNsapVideoTitle, t("profile.noMatchedVideo"))))}
         ${renderReadOnly(t("profile.matchStatus"), escapeHtml(getNsapMatchStatusLabel(creator.nsapMatchStatus)))}
-        ${renderReadOnly(t("profile.matchReason"), escapeHtml(formatOptional(creator.nsapMatchReason, t("profile.notReviewed"))))}
+        ${renderReadOnly(t("profile.matchReason"), escapeHtml(localizeMatchReason(creator.nsapMatchReason)))}
         ${creator.nsapMatchedKeyword ? renderReadOnly(t("profile.matchedKeyword"), escapeHtml(creator.nsapMatchedKeyword)) : ""}
-        ${creator.nsapDecisionActor ? renderReadOnly(t("profile.manualDecision"), escapeHtml(`${creator.nsapDecisionActor} / ${creator.nsapDecisionAt || t("common.unknown")}`)) : ""}
+        ${creator.nsapDecisionActor ? renderReadOnly(t("profile.manualDecision"), escapeHtml(`${creator.nsapDecisionActor} / ${formatLocalizedDateTime(creator.nsapDecisionAt)}`)) : ""}
       </div>
     </section>
 
-    ${renderNsapReview(creator, permissions, reviewCandidate)}
+    ${renderNsapReview(creator, permissions, reviewState)}
 
     ${(creator.latestChannelVideoTitle || creator.latestChannelUploadDate) ? `
       <section class="modal-section profile-section">
@@ -321,7 +320,7 @@ function renderTimeline(creator) {
     .map((item) => `
       <article class="activity-item">
         <strong>${escapeHtml(item.type || "custom")}</strong>
-        <span>${escapeHtml(item.timestamp || "")} / ${escapeHtml(item.actorUsername || t("common.system"))} (${escapeHtml(t(`role.${item.actorRole || "system"}`))})</span>
+        <span>${escapeHtml(formatActivityDate(item.timestamp))} / ${escapeHtml(item.actorUsername || t("common.system"))} (${escapeHtml(t(`role.${item.actorRole || "system"}`))})</span>
         <p>${escapeHtml(item.message || "")}</p>
       </article>
     `)
@@ -337,7 +336,7 @@ function renderHistory(history = []) {
     .map((item) => `
       <article class="activity-item">
         <strong>${escapeHtml(item.type || t("profile.activity"))}</strong>
-        <span>${escapeHtml(item.date || t("common.noDate"))}</span>
+        <span>${escapeHtml(formatActivityDate(item.date))}</span>
         <p>${escapeHtml(item.note || "")}</p>
       </article>
     `)
@@ -415,40 +414,19 @@ function getPlatformUrl(value, hosts) {
   return hosts.some((host) => hostname === host || hostname.endsWith(`.${host}`)) ? url : "";
 }
 
-export function getNsapReviewCandidate(creator) {
-  const nsapUrl = getPlatformUrl(creator.latestNsapVideoUrl, ["youtube.com", "youtu.be"]);
-  if (["matched", NSAP_REVIEW_DECISION.CONFIRM].includes(creator.nsapMatchStatus) && nsapUrl && creator.latestNsapVideoTitle && creator.latestNsapUploadDate) {
-    return {
-      videoTitle: creator.latestNsapVideoTitle,
-      videoUrl: nsapUrl,
-      videoUploadDate: creator.latestNsapUploadDate,
-    };
-  }
-
-  const channelUrl = getPlatformUrl(creator.latestChannelVideoUrl, ["youtube.com", "youtu.be"]);
-  const rejectedUrl = getPlatformUrl(creator.nsapDecisionVideoUrl, ["youtube.com", "youtu.be"]);
-  if (channelUrl && channelUrl !== rejectedUrl && creator.latestChannelVideoTitle && creator.latestChannelUploadDate) {
-    return {
-      videoTitle: creator.latestChannelVideoTitle,
-      videoUrl: channelUrl,
-      videoUploadDate: creator.latestChannelUploadDate,
-    };
-  }
-
-  return null;
-}
-
-function renderNsapReview(creator, permissions, candidate) {
+function renderNsapReview(creator, permissions, reviewState) {
+  if (reviewState.status === "confirmed") return "";
+  const candidate = reviewState.candidate;
   const hasManualDecision = Boolean(creator.nsapDecisionVideoUrl || creator.nsapDecisionActor || creator.nsapDecisionAt);
   const candidateDetails = candidate
     ? `<div class="modal-grid overview-grid">
-        ${renderReadOnly(t("review.candidateTitle"), escapeHtml(candidate.videoTitle))}
-        ${renderReadOnly(t("review.uploadDate"), escapeHtml(candidate.videoUploadDate))}
-        ${renderReadOnly(t("review.videoUrl"), `<a href="${escapeHtml(candidate.videoUrl)}" target="_blank" rel="noreferrer">${escapeHtml(candidate.videoUrl)}</a>`)}
-        ${renderReadOnly(t("profile.matchStatus"), escapeHtml(getNsapMatchStatusLabel(creator.nsapMatchStatus)))}
-        ${renderReadOnly(t("profile.matchReason"), escapeHtml(formatOptional(creator.nsapMatchReason, t("profile.notReviewed"))))}
+        ${renderReadOnly(t("review.candidateTitle"), escapeHtml(candidate.title))}
+        ${renderReadOnly(t("review.uploadDate"), escapeHtml(formatLocalizedDate(candidate.uploadDate)))}
+        ${renderReadOnly(t("review.videoUrl"), `<a href="${escapeHtml(candidate.url)}" target="_blank" rel="noreferrer">${escapeHtml(candidate.url)}</a>`)}
+        ${renderReadOnly(t("review.position"), escapeHtml(t("review.positionValue", { current: candidate.index, total: candidate.total })))}
+        ${renderReadOnly(t("profile.matchReason"), escapeHtml(localizeMatchReason(candidate.matchReason)))}
       </div>`
-    : `<p class="empty-state compact-empty">${escapeHtml(t("review.noCandidate"))}</p>`;
+    : `<p class="empty-state compact-empty">${escapeHtml(getEmptyReviewMessage(reviewState.status))}</p>`;
 
   const actions = permissions.canEdit
     ? `<div class="button-row modal-actions-row">
@@ -459,6 +437,10 @@ function renderNsapReview(creator, permissions, candidate) {
         <div>
           <button class="button button-secondary" data-nsap-review="${NSAP_REVIEW_DECISION.REJECT}" data-creator-id="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.reject"))}</button>
           <p class="settings-copy">${escapeHtml(t("review.rejectText"))}</p>
+        </div>
+        <div>
+          <button class="button button-secondary" data-nsap-next="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.showNext"))}</button>
+          <p class="settings-copy">${escapeHtml(t("review.showNextText"))}</p>
         </div>
         ${hasManualDecision ? `<div>
           <button class="button button-secondary" data-nsap-review="${NSAP_REVIEW_DECISION.CLEAR}" data-creator-id="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("review.clear"))}</button>
@@ -472,6 +454,30 @@ function renderNsapReview(creator, permissions, candidate) {
     ${candidateDetails}
     ${actions}
   </section>`;
+}
+
+function getEmptyReviewMessage(status) {
+  if (status === "exhausted") return t("review.allChecked");
+  if (status === "unavailable") return t("review.unavailable");
+  return t("review.syncToLoad");
+}
+
+function localizeMatchReason(reason) {
+  const value = String(reason || "");
+  if (!value) return t("profile.notReviewed");
+  if (value === "No relevant NSAP video found in recent feed entries") return t("match.noRelevantVideo");
+  let match = value.match(/^Matched (title|description) (hashtag|phrase): \"(.+)\"$/);
+  if (match) return t(`match.${match[1]}.${match[2]}`, { value: match[3] });
+  match = value.match(/^Matched combined terms: \"(.+)\"$/);
+  if (match) return t("match.combinedTerms", { value: match[1] });
+  match = value.match(/^Manually confirmed by (.+)$/);
+  if (match) return t("match.manuallyConfirmed", { actor: match[1] });
+  return value;
+}
+
+function formatActivityDate(value) {
+  if (!value) return t("common.noDate");
+  return String(value).includes("T") ? formatLocalizedDateTime(value) : formatLocalizedDate(value);
 }
 
 function getSyncStatusLabel(creator) {

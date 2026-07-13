@@ -48,7 +48,7 @@ function createYouTubeClient({ fetchImpl = globalThis.fetch, mappingStore, throt
     const channel = parseYouTubeChannelUrl(youtubeUrl);
     const channelId = channel.channelId || await resolveHandle(channel, youtubeUrl);
     const feed = await fetchFeed(channelId);
-    return { ...selectYouTubeFeed(feed.entries, options.excludedVideoUrls), channelId };
+    return { ...selectYouTubeFeed(feed.entries, options.excludedVideoUrls), channelId, entries: feed.entries };
   }
 
   async function resolveHandle(channel, originalUrl) {
