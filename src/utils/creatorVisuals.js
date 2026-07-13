@@ -1,6 +1,7 @@
 import { daysSinceUpload, uploadAgeLabel, uploadAgeTone } from "./dates.js";
 import { t } from "../i18n/index.js";
 import { escapeHtml, safeUrl, toKebab } from "./format.js";
+import { NSAP_REVIEW_DECISION } from "../constants/nsapReview.js";
 
 const labelTone = {
   Active: "good",
@@ -47,9 +48,9 @@ export function renderBadge(label, type = label) {
 export function getNsapHealth(creator) {
   const status = creator.nsapMatchStatus;
   if (status === "sync_failed") return healthResult("bad", "health.syncFailed");
-  if (status === "manual_rejected" || !status) return healthResult("watch", "health.manualReview");
+  if (status === NSAP_REVIEW_DECISION.REJECT || !status) return healthResult("watch", "health.manualReview");
   if (["no_match", "unsupported"].includes(status)) return healthResult("unknown", "health.noContent");
-  if (!["matched", "manual_confirmed"].includes(status)) return healthResult("watch", "health.manualReview");
+  if (!["matched", NSAP_REVIEW_DECISION.CONFIRM].includes(status)) return healthResult("watch", "health.manualReview");
 
   const days = daysSinceUpload(creator.latestNsapUploadDate);
   if (days === null) return healthResult("unknown", "health.noContent");

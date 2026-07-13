@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const db = require("../db");
 const { createYouTubeClient, RequestThrottle, YouTubeSyncError } = require("./youtube");
+const { DECISION: NSAP_REVIEW_DECISION } = require("../../shared/nsapReviewContract");
 
 class TaskQueue {
   constructor() { this.pending = Promise.resolve(); }
@@ -33,7 +34,7 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
     const lastSync = new Date().toISOString();
     try {
       const reviews = await dbApi.getCreatorNsapReviews(creatorId);
-      const excludedVideoUrls = reviews.filter((review) => review.decision === "manual_rejected").map((review) => review.video_url);
+      const excludedVideoUrls = reviews.filter((review) => review.decision === NSAP_REVIEW_DECISION.REJECT).map((review) => review.video_url);
       const upload = await client.syncCreator(creator, { excludedVideoUrls });
       const result = reconcileNsapResult(creator, upload);
       return dbApi.updateCreatorYouTubeSync({ creatorId, user, ip, result: { ...result, lastSync, syncStatus: "synced", syncError: "" } });
@@ -59,10 +60,10 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
     const creator = await dbApi.getCreator(creatorId);
     if (!creator || creator.deleted) return null;
     let automaticResult = null;
-    if (review.decision !== "manual_confirmed") {
-      const reviews = review.decision === "clear_manual_decision" ? [] : await dbApi.getCreatorNsapReviews(creatorId);
-      const excludedVideoUrls = review.decision === "manual_rejected"
-        ? [...reviews.filter((item) => item.decision === "manual_rejected").map((item) => item.video_url), review.videoUrl]
+    if (review.decision !== NSAP_REVIEW_DECISION.CONFIRM) {
+      const reviews = review.decision === NSAP_REVIEW_DECISION.CLEAR ? [] : await dbApi.getCreatorNsapReviews(creatorId);
+      const excludedVideoUrls = review.decision === NSAP_REVIEW_DECISION.REJECT
+        ? [...reviews.filter((item) => item.decision === NSAP_REVIEW_DECISION.REJECT).map((item) => item.video_url), review.videoUrl]
         : [];
       try {
         automaticResult = await client.syncCreator(creator, { excludedVideoUrls });
@@ -160,7 +161,7 @@ function reconcileNsapResult(creator, upload) {
 }
 
 function isManualDecision(status) {
-  return status === "manual_confirmed" || status === "manual_rejected";
+  return status === NSAP_REVIEW_DECISION.CONFIRM || status === NSAP_REVIEW_DECISION.REJECT;
 }
 
 function normalizeSyncError(error) {

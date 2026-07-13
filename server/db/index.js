@@ -5,6 +5,7 @@ const { normalizeTimelineEntry, validateCreatorPayload } = require("../validatio
 const { runMigrations } = require("./migrations");
 const { createPostgresAdapter } = require("./postgres");
 const { createSqliteAdapter } = require("./sqlite");
+const { DECISION: NSAP_REVIEW_DECISION } = require("../../shared/nsapReviewContract");
 
 let db;
 const marker = (n) => db.type === "postgres" ? `$${n}` : "?";
@@ -59,18 +60,18 @@ function buildPostgresCreatorUpsert(c, now = new Date().toISOString()) {
 }
 
 function applyCreatorNsapReview(creator, review, automaticResult, user, decidedAt = new Date().toISOString()) {
-  if (review.decision === "manual_confirmed") {
+  if (review.decision === NSAP_REVIEW_DECISION.CONFIRM) {
     creator.latestNsapVideoTitle = review.videoTitle;
     creator.latestNsapVideoUrl = review.videoUrl;
     creator.latestNsapUploadDate = review.videoUploadDate;
-    creator.nsapMatchStatus = "manual_confirmed";
+    creator.nsapMatchStatus = NSAP_REVIEW_DECISION.CONFIRM;
     creator.nsapMatchReason = `Manually confirmed by ${user?.username || "Manager"}`;
     creator.nsapMatchedKeyword = "";
   } else {
     applyAutomaticNsapResult(creator, automaticResult);
   }
 
-  if (review.decision === "clear_manual_decision") {
+  if (review.decision === NSAP_REVIEW_DECISION.CLEAR) {
     clearNsapDecisionFields(creator);
   } else {
     creator.nsapDecisionVideoTitle = review.videoTitle;
@@ -302,7 +303,7 @@ async function updateCreatorNsapDecision({creatorId,review,automaticResult,user,
   return db.transaction(async (tx) => {
     const creator = await getCreator(creatorId, tx);
     if (!creator || creator.deleted) return null;
-    if (review.decision !== "clear_manual_decision" && !isCurrentNsapCandidate(creator, review)) {
+    if (review.decision !== NSAP_REVIEW_DECISION.CLEAR && !isCurrentNsapCandidate(creator, review)) {
       const error = new Error("The selected video is stale. Refresh the profile and review the current candidate.");
       error.status = 409;
       throw error;
@@ -313,7 +314,7 @@ async function updateCreatorNsapDecision({creatorId,review,automaticResult,user,
       latestNsapUploadDate: creator.latestNsapUploadDate,
       nsapMatchStatus: creator.nsapMatchStatus,
     };
-    if (review.decision === "clear_manual_decision") {
+    if (review.decision === NSAP_REVIEW_DECISION.CLEAR) {
       await tx.run(`DELETE FROM creator_nsap_video_reviews WHERE creator_id=${marker(1)}`, [creatorId]);
     } else {
       const values = [creatorId, review.videoUrl, review.videoTitle, review.videoUploadDate, review.decision, user?.username || "Manager"];
@@ -333,7 +334,7 @@ async function updateCreatorNsapDecision({creatorId,review,automaticResult,user,
       oldValue,
       newValue: {
         decision: review.decision,
-        candidate: review.decision === "clear_manual_decision" ? null : { title: review.videoTitle, url: review.videoUrl, uploadDate: review.videoUploadDate },
+        candidate: review.decision === NSAP_REVIEW_DECISION.CLEAR ? null : { title: review.videoTitle, url: review.videoUrl, uploadDate: review.videoUploadDate },
         automaticStatus: creator.nsapMatchStatus,
       },
       ip,

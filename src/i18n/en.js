@@ -281,6 +281,7 @@ export default {
   "error.sessionExpired": "Session expired. Please log in again.",
   "error.refreshSession": "Session expired. Please refresh and try again.",
   "error.requestFailed": "Request failed: {status}",
+  "error.invalidNsapReviewDecision": "Invalid NSAP review decision.",
   "error.creatorNameRequired": "Creator Name is required.",
   "error.creatorAddFailed": "Unable to add creator. Please check the form and try again.",
   "error.adminRequired": "Admin role required",

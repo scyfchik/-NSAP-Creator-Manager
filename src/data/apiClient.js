@@ -1,4 +1,5 @@
 import { t } from "../i18n/index.js";
+import { isNsapReviewDecision, NSAP_REVIEW_DECISION } from "../constants/nsapReview.js";
 
 async function request(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
@@ -104,10 +105,16 @@ export const api = {
     return request(`/api/creators/${encodeURIComponent(creatorId)}/sync/youtube`, { method: "POST", body: JSON.stringify({}) });
   },
   setNsapDecision(creatorId, payload) {
+    if (!payload || !isNsapReviewDecision(payload.decision)) {
+      throw new TypeError(t("error.invalidNsapReviewDecision"));
+    }
     return request(`/api/creators/${encodeURIComponent(creatorId)}/youtube/nsap-decision`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+  undoNsapReview(creatorId) {
+    return this.setNsapDecision(creatorId, { decision: NSAP_REVIEW_DECISION.UNDO });
   },
   startYouTubeSyncAll() {
     return request("/api/sync/youtube/all", { method: "POST", body: JSON.stringify({}) });

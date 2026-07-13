@@ -2,6 +2,7 @@ import { relativeSyncLabel } from "../utils/dates.js";
 import { getNsapHealth, renderAvatar, renderBadge } from "../utils/creatorVisuals.js";
 import { escapeHtml, formatNumber, formatOptional, safeUrl } from "../utils/format.js";
 import { t } from "../i18n/index.js";
+import { NSAP_REVIEW_DECISION } from "../constants/nsapReview.js";
 
 export const reminderTemplates = {
   inactivity: {
@@ -416,7 +417,7 @@ function getPlatformUrl(value, hosts) {
 
 export function getNsapReviewCandidate(creator) {
   const nsapUrl = getPlatformUrl(creator.latestNsapVideoUrl, ["youtube.com", "youtu.be"]);
-  if (["matched", "manual_confirmed"].includes(creator.nsapMatchStatus) && nsapUrl && creator.latestNsapVideoTitle && creator.latestNsapUploadDate) {
+  if (["matched", NSAP_REVIEW_DECISION.CONFIRM].includes(creator.nsapMatchStatus) && nsapUrl && creator.latestNsapVideoTitle && creator.latestNsapUploadDate) {
     return {
       videoTitle: creator.latestNsapVideoTitle,
       videoUrl: nsapUrl,
@@ -452,15 +453,15 @@ function renderNsapReview(creator, permissions, candidate) {
   const actions = permissions.canEdit
     ? `<div class="button-row modal-actions-row">
         <div>
-          <button class="button button-primary" data-nsap-review="manual_confirmed" data-creator-id="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.confirm"))}</button>
+          <button class="button button-primary" data-nsap-review="${NSAP_REVIEW_DECISION.CONFIRM}" data-creator-id="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.confirm"))}</button>
           <p class="settings-copy">${escapeHtml(t("review.confirmText"))}</p>
         </div>
         <div>
-          <button class="button button-secondary" data-nsap-review="manual_rejected" data-creator-id="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.reject"))}</button>
+          <button class="button button-secondary" data-nsap-review="${NSAP_REVIEW_DECISION.REJECT}" data-creator-id="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.reject"))}</button>
           <p class="settings-copy">${escapeHtml(t("review.rejectText"))}</p>
         </div>
         ${hasManualDecision ? `<div>
-          <button class="button button-secondary" data-nsap-review="clear_manual_decision" data-creator-id="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("review.clear"))}</button>
+          <button class="button button-secondary" data-nsap-review="${NSAP_REVIEW_DECISION.CLEAR}" data-creator-id="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("review.clear"))}</button>
           <p class="settings-copy">${escapeHtml(t("review.clearText"))}</p>
         </div>` : ""}
       </div>`
@@ -486,8 +487,8 @@ function getNsapMatchStatusLabel(status) {
   const labels = {
     matched: "status.matched",
     no_match: "status.noMatch",
-    manual_confirmed: "status.manualConfirmed",
-    manual_rejected: "status.manualRejected",
+    [NSAP_REVIEW_DECISION.CONFIRM]: "status.manualConfirmed",
+    [NSAP_REVIEW_DECISION.REJECT]: "status.manualRejected",
     sync_failed: "status.syncFailed",
     unsupported: "status.unsupported",
   };

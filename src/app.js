@@ -19,6 +19,7 @@ import {
 import { renderSettings } from "./ui/settings.js";
 import { showToast } from "./ui/toast.js";
 import { applyStaticTranslations, setLanguage, t } from "./i18n/index.js";
+import { NSAP_REVIEW_DECISION } from "./constants/nsapReview.js";
 
 const unsavedMessage = () => t("common.unsavedPrompt");
 
@@ -785,21 +786,21 @@ async function setCreatorNsapDecision(creatorId, decision) {
 
   const creator = getCreatorById(creatorId);
   const candidate = creator ? getNsapReviewCandidate(creator) : null;
-  if (decision !== "clear_manual_decision" && !candidate) {
+  if (decision !== NSAP_REVIEW_DECISION.CLEAR && !candidate) {
     showToast(t("review.noCandidate"), "error");
     return;
   }
 
-  const promptKey = decision === "manual_confirmed"
+  const promptKey = decision === NSAP_REVIEW_DECISION.CONFIRM
     ? "review.confirmPrompt"
-    : decision === "manual_rejected"
+    : decision === NSAP_REVIEW_DECISION.REJECT
       ? "review.rejectPrompt"
       : "review.clearPrompt";
   if (!window.confirm(t(promptKey, { title: candidate?.videoTitle || creator?.nsapDecisionVideoTitle || t("common.unknown") }))) {
     return;
   }
 
-  const payload = decision === "clear_manual_decision"
+  const payload = decision === NSAP_REVIEW_DECISION.CLEAR
     ? { decision }
     : { decision, ...candidate };
   pendingSaveRequests += 1;
@@ -807,15 +808,21 @@ async function setCreatorNsapDecision(creatorId, decision) {
   try {
     const response = await api.setNsapDecision(creatorId, payload);
     replaceCreator(response.creator);
+    if (decision === NSAP_REVIEW_DECISION.CLEAR) {
+      undoStack = undoStack.filter((snapshot) => snapshot.kind !== "nsapReview" || snapshot.creatorId !== creatorId);
+    } else {
+      undoStack.unshift({ kind: "nsapReview", creatorId });
+      undoStack = undoStack.slice(0, 10);
+    }
     savedAt = new Date().toISOString();
     renderAll();
     activeCreatorId = response.creator.id;
     openCreatorModal(response.creator, session.permissions);
     initializeModalDirty("timeline");
     setModalWorkflowState("saved", t("save.saved"), true);
-    const toastKey = decision === "manual_confirmed"
+    const toastKey = decision === NSAP_REVIEW_DECISION.CONFIRM
       ? "review.confirmed"
-      : decision === "manual_rejected"
+      : decision === NSAP_REVIEW_DECISION.REJECT
         ? "review.rejected"
         : "review.cleared";
     showToast(t(toastKey));
@@ -920,10 +927,21 @@ async function undoLastEdit() {
   }
 
   try {
-    const response = await api.updateCreator(snapshot.creatorId, snapshot.field, snapshot.oldValue);
+    const response = snapshot.kind === "nsapReview"
+      ? await api.undoNsapReview(snapshot.creatorId)
+      : await api.updateCreator(snapshot.creatorId, snapshot.field, snapshot.oldValue);
     replaceCreator(response.creator);
     renderAll();
-    showToast(t("message.lastEditUndone"));
+    if (snapshot.kind === "nsapReview") {
+      activeCreatorId = response.creator.id;
+      if (document.getElementById("creatorDialog").open) {
+        openCreatorModal(response.creator, session.permissions);
+        initializeModalDirty("timeline");
+      }
+      showToast(t("review.cleared"));
+    } else {
+      showToast(t("message.lastEditUndone"));
+    }
   } catch (error) {
     showToast(error.message, "error");
   }

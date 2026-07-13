@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { __testing } = require("./index");
+const { DECISION: NSAP_REVIEW_DECISION } = require("../../shared/nsapReviewContract");
 
 function run() {
   const title = "Time to Create: Sync titles with spaces & punctuation!";
@@ -82,7 +83,7 @@ function run() {
   assert.equal(mapped.nsapMatchStatus, "matched", "PostgreSQL match status must remain authoritative");
 
   const confirmReview = {
-    decision: "manual_confirmed",
+    decision: NSAP_REVIEW_DECISION.CONFIRM,
     videoTitle: "Manual NSAP video",
     videoUrl: "https://www.youtube.com/watch?v=manual",
     videoUploadDate: "2026-07-11",
@@ -92,7 +93,7 @@ function run() {
     latestChannelVideoUrl: "https://www.youtube.com/watch?v=manual",
     latestChannelUploadDate: "2026-07-11",
   }, confirmReview, null, { username: "Manager One" }, "2026-07-12T13:00:00.000Z");
-  assert.equal(manuallyConfirmed.nsapMatchStatus, "manual_confirmed");
+  assert.equal(manuallyConfirmed.nsapMatchStatus, NSAP_REVIEW_DECISION.CONFIRM);
   assert.equal(manuallyConfirmed.latestNsapVideoTitle, "Manual NSAP video");
   assert.equal(manuallyConfirmed.nsapDecisionActor, "Manager One");
   const manualContract = __testing.buildPostgresCreatorUpsert({ id: "manual", name: "Manual", ...manuallyConfirmed });
@@ -103,7 +104,7 @@ function run() {
   assert.equal(manualContract.params[manualContract.columns.indexOf("nsap_decision_at")], "2026-07-12T13:00:00.000Z");
 
   const rejectedReview = {
-    decision: "manual_rejected",
+    decision: NSAP_REVIEW_DECISION.REJECT,
     videoTitle: "Unrelated video",
     videoUrl: "https://www.youtube.com/watch?v=unrelated",
     videoUploadDate: "2026-07-12",
@@ -139,7 +140,7 @@ function run() {
   }, rejectedReview), false, "a stale or substituted candidate must be rejected");
 
   const cleared = __testing.applyCreatorNsapReview({ ...manuallyRejected }, {
-    decision: "clear_manual_decision",
+    decision: NSAP_REVIEW_DECISION.CLEAR,
     videoTitle: "",
     videoUrl: "",
     videoUploadDate: "",
@@ -162,7 +163,7 @@ function run() {
   assert.match(migrationsSource, /005_creator_nsap_video_reviews/);
   assert.match(migrationsSource, /creator_id TEXT NOT NULL REFERENCES creators\(id\) ON DELETE CASCADE/);
   assert.match(migrationsSource, /UNIQUE \(creator_id, video_url\)/, "PostgreSQL review rows must be unique per exact creator/video candidate");
-  assert.match(migrationsSource, /decision IN \('manual_confirmed', 'manual_rejected'\)/);
+  assert.match(migrationsSource, new RegExp(`decision IN \\('\\$\\{NSAP_REVIEW_DECISION\\.CONFIRM\\}', '\\$\\{NSAP_REVIEW_DECISION\\.REJECT\\}'\\)`));
   const dbSource = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
   assert.match(dbSource, /const values = \[creatorId, review\.videoUrl, review\.videoTitle, review\.videoUploadDate, review\.decision, user\?\.username \|\| "Manager"\]/);
   assert.match(dbSource, /INSERT INTO creator_nsap_video_reviews \(creator_id,video_url,video_title,video_upload_date,decision,actor\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6\)/, "PostgreSQL review parameter order must match its columns");

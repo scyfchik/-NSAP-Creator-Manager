@@ -5,6 +5,7 @@ const { matchNsapContent } = require("./nsapContentMatcher");
 const { validateNsapDecision } = require("../validation");
 const { RequestThrottle, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed, selectYouTubeFeed } = require("./youtube");
 const { TaskQueue, createYouTubeSyncManager, reconcileNsapResult } = require("./youtubeSync");
+const { DECISION: NSAP_REVIEW_DECISION } = require("../../shared/nsapReviewContract");
 
 const CHANNEL_ID = "UC1234567890123456789012";
 const FEED = `<?xml version="1.0"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/"><entry><yt:videoId>newest</yt:videoId><title>Minecraft survival episode 4</title><published>2026-07-12T10:00:00+00:00</published><link rel="alternate" href="https://www.youtube.com/watch?v=newest"/></entry><entry><yt:videoId>older</yt:videoId><title>Night Shift at Paulie's is TERRIFYING</title><published>2026-07-01T10:00:00+00:00</published><media:group><media:description>Roblox gameplay</media:description></media:group><link rel="alternate" href="https://www.youtube.com/watch?v=older"/></entry></feed>`;
@@ -57,8 +58,8 @@ async function run() {
   ["status", "priority", "notes", "quickNote", "followUpDate", "dmSent", "collabPosted"]
     .forEach((field) => assert.equal(Object.hasOwn(preserved, field), false, `${field} must remain outside the sync result`));
 
-  const manual = { nsapMatchStatus: "manual_rejected", nsapMatchReason: "Marked as unrelated", nsapDecisionVideoUploadDate: "2026-07-12", latestNsapUploadDate: "2026-06-01" };
-  assert.equal(reconcileNsapResult(manual, upload).nsapMatchStatus, "manual_rejected", "older matches must not replace manual decisions");
+  const manual = { nsapMatchStatus: NSAP_REVIEW_DECISION.REJECT, nsapMatchReason: "Marked as unrelated", nsapDecisionVideoUploadDate: "2026-07-12", latestNsapUploadDate: "2026-06-01" };
+  assert.equal(reconcileNsapResult(manual, upload).nsapMatchStatus, NSAP_REVIEW_DECISION.REJECT, "older matches must not replace manual decisions");
   const newerMatch = { ...upload, latestNsapUploadDate: "2026-07-13" };
   assert.equal(reconcileNsapResult(manual, newerMatch).nsapMatchStatus, "matched", "a newer match must replace the manual decision");
 
@@ -93,24 +94,38 @@ async function run() {
   assert.deepEqual(order, [1, 2]);
 
   assert.deepEqual(validateNsapDecision({
-    decision: "manual_confirmed",
+    decision: NSAP_REVIEW_DECISION.CONFIRM,
     videoTitle: "Exact NSAP candidate",
     videoUrl: "https://www.youtube.com/watch?v=exact",
     videoUploadDate: "2026-07-12",
   }), {
-    decision: "manual_confirmed",
+    decision: NSAP_REVIEW_DECISION.CONFIRM,
     videoTitle: "Exact NSAP candidate",
     videoUrl: "https://www.youtube.com/watch?v=exact",
     videoUploadDate: "2026-07-12",
   });
-  assert.throws(() => validateNsapDecision({ decision: "manual_rejected", videoTitle: "Bad", videoUrl: "javascript:alert(1)", videoUploadDate: "2026-07-12" }), /valid YouTube/);
-  assert.throws(() => validateNsapDecision({ decision: "manual_rejected", videoTitle: "Bad date", videoUrl: "https://youtu.be/exact", videoUploadDate: "2026-02-31" }), /valid YouTube/);
-  assert.deepEqual(validateNsapDecision({ decision: "clear_manual_decision" }), { decision: "clear_manual_decision", videoTitle: "", videoUrl: "", videoUploadDate: "" });
+  assert.throws(() => validateNsapDecision({ decision: NSAP_REVIEW_DECISION.REJECT, videoTitle: "Bad", videoUrl: "javascript:alert(1)", videoUploadDate: "2026-07-12" }), /valid YouTube/);
+  assert.throws(() => validateNsapDecision({ decision: NSAP_REVIEW_DECISION.REJECT, videoTitle: "Bad date", videoUrl: "https://youtu.be/exact", videoUploadDate: "2026-02-31" }), /valid YouTube/);
+  assert.deepEqual(validateNsapDecision({ decision: NSAP_REVIEW_DECISION.CLEAR }), { decision: NSAP_REVIEW_DECISION.CLEAR, videoTitle: "", videoUrl: "", videoUploadDate: "" });
+  assert.throws(() => validateNsapDecision({ decision: "rejected" }), /Invalid NSAP review decision/);
+  assert.equal(NSAP_REVIEW_DECISION.UNDO, NSAP_REVIEW_DECISION.CLEAR);
 
   await testProgress();
   await testExactReviewFlow();
   assertFrontendUsesNsapDate();
+  assertFrontendReviewContract();
   console.log("YouTube sync tests passed");
+}
+
+function assertFrontendReviewContract() {
+  const root = path.resolve(__dirname, "../..");
+  ["src/ui/modal.js", "src/app.js", "src/data/apiClient.js"].forEach((file) => {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.match(source, /NSAP_REVIEW_DECISION|isNsapReviewDecision/, `${file} must use the shared decision contract`);
+    assert.doesNotMatch(source, /data-nsap-review="rejected"|decision:\s*"rejected"/, `${file} must not send the legacy rejected value`);
+  });
+  const appSource = fs.readFileSync(path.join(root, "src/app.js"), "utf8");
+  assert.match(appSource, /api\.undoNsapReview/, "Review Undo must call the server-side clear action");
 }
 
 function assertFrontendUsesNsapDate() {
@@ -178,7 +193,7 @@ async function testExactReviewFlow() {
   };
   const manager = createYouTubeSyncManager({ dbApi, minRequestIntervalMs: 0, fetchImpl: async () => response(FEED) });
   const review = {
-    decision: "manual_rejected",
+    decision: NSAP_REVIEW_DECISION.REJECT,
     videoTitle: creator.latestNsapVideoTitle,
     videoUrl: creator.latestNsapVideoUrl,
     videoUploadDate: creator.latestNsapUploadDate,

@@ -1,4 +1,5 @@
 const editableFields = require("./permissions").editableFields;
+const { DECISION: NSAP_REVIEW_DECISION, VALUES: NSAP_REVIEW_DECISION_VALUES } = require("../shared/nsapReviewContract");
 
 const MAX_CREATORS_IMPORT = 5000;
 const MAX_HISTORY_ITEMS = 50;
@@ -33,7 +34,7 @@ const profileFields = new Set([
   "collabPosted",
   "dmSent",
 ]);
-const nsapMatchStatuses = ["matched", "no_match", "manual_confirmed", "manual_rejected", "sync_failed", "unsupported"];
+const nsapMatchStatuses = ["matched", "no_match", NSAP_REVIEW_DECISION.CONFIRM, NSAP_REVIEW_DECISION.REJECT, "sync_failed", "unsupported"];
 
 const fieldValidators = {
   status(value) {
@@ -247,11 +248,10 @@ function validateProfileUpdate(payload) {
 }
 
 function validateNsapDecision(payload) {
-  const allowed = ["manual_confirmed", "manual_rejected", "clear_manual_decision"];
-  if (!payload || typeof payload !== "object" || !allowed.includes(payload.decision)) {
+  if (!payload || typeof payload !== "object" || !NSAP_REVIEW_DECISION_VALUES.includes(payload.decision)) {
     throwRequestError("Invalid NSAP review decision.", 400);
   }
-  if (payload.decision === "clear_manual_decision") {
+  if (payload.decision === NSAP_REVIEW_DECISION.CLEAR) {
     return { decision: payload.decision, videoTitle: "", videoUrl: "", videoUploadDate: "" };
   }
 

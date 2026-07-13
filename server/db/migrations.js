@@ -1,3 +1,5 @@
+const { DECISION: NSAP_REVIEW_DECISION } = require("../../shared/nsapReviewContract");
+
 const migrations = [{
   id: "001_initial_postgres_schema",
   postgres: `
@@ -92,7 +94,7 @@ const migrations = [{
       video_url TEXT NOT NULL,
       video_title TEXT NOT NULL,
       video_upload_date DATE NOT NULL,
-      decision TEXT NOT NULL CHECK (decision IN ('manual_confirmed', 'manual_rejected')),
+      decision TEXT NOT NULL CHECK (decision IN ('${NSAP_REVIEW_DECISION.CONFIRM}', '${NSAP_REVIEW_DECISION.REJECT}')),
       actor TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -107,7 +109,7 @@ const migrations = [{
       video_url TEXT NOT NULL,
       video_title TEXT NOT NULL,
       video_upload_date TEXT NOT NULL,
-      decision TEXT NOT NULL CHECK (decision IN ('manual_confirmed', 'manual_rejected')),
+      decision TEXT NOT NULL CHECK (decision IN ('${NSAP_REVIEW_DECISION.CONFIRM}', '${NSAP_REVIEW_DECISION.REJECT}')),
       actor TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

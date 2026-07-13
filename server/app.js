@@ -324,6 +324,11 @@ async function createApp() {
     extensions: false,
     index: false,
     maxAge: isProduction ? "1h" : 0,
+    setHeaders(res, filePath) {
+      if ([".html", ".js"].includes(path.extname(filePath))) {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
   }));
   app.get("*", (req, res) => {
     res.sendFile(path.join(publicDir, "index.html"));

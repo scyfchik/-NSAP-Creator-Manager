@@ -6,12 +6,13 @@
     "start": "node server/server.js",
     "dev": "node server/server.js",
     "build": "npm run check",
-    "check": "node --check server/server.js && node --check server/app.js && node --check server/auth.js && node --check server/db/index.js && node --check server/db/index.test.js && node --check server/db/postgres.js && node --check server/db/sqlite.js && node --check server/db/migrations.js && node --check server/integrations/nsapContentMatcher.js && node --check server/integrations/youtube.js && node --check server/integrations/youtubeSync.js && node --check server/integrations/youtube.test.js && node --check server/scripts/migrate-sqlite-to-postgres.js && node --check server/scripts/audit-creator-persistence.js && node --check server/security.js && node --check server/validation.js",
+    "check": "node --check shared/nsapReviewContract.js && node --check server/server.js && node --check server/app.js && node --check server/auth.js && node --check server/db/index.js && node --check server/db/index.test.js && node --check server/db/postgres.js && node --check server/db/sqlite.js && node --check server/db/migrations.js && node --check server/integrations/nsapContentMatcher.js && node --check server/integrations/youtube.js && node --check server/integrations/youtubeSync.js && node --check server/integrations/youtube.test.js && node --check server/nsapReviewContract.test.js && node --check server/scripts/migrate-sqlite-to-postgres.js && node --check server/scripts/audit-creator-persistence.js && node --check server/security.js && node --check server/validation.js",
     "migrate": "node -e \"require('./server/db').initDatabase().then(()=>require('./server/db').closeDatabase())\"",
     "migrate:sqlite-to-postgres": "node server/scripts/migrate-sqlite-to-postgres.js",
     "audit:postgres-persistence": "node server/scripts/audit-creator-persistence.js",
     "test:youtube-sync": "node server/integrations/youtube.test.js",
-    "test:postgres-contract": "node server/db/index.test.js"
+    "test:postgres-contract": "node server/db/index.test.js",
+    "test:nsap-review": "node server/nsapReviewContract.test.js"
   },
   "engines": {
     "node": ">=22.5.0"

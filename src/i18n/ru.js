@@ -281,6 +281,7 @@ export default {
   "error.sessionExpired": "Сессия завершена. Войдите снова.",
   "error.refreshSession": "Сессия завершена. Обновите страницу и повторите попытку.",
   "error.requestFailed": "Ошибка запроса: {status}",
+  "error.invalidNsapReviewDecision": "Некорректное решение проверки NSAP.",
   "error.creatorNameRequired": "Укажите имя автора.",
   "error.creatorAddFailed": "Не удалось добавить автора. Проверьте форму и повторите попытку.",
   "error.adminRequired": "Требуется роль администратора",
