@@ -21,11 +21,11 @@ function renderCreators(creators, permissions) {
     return;
   }
   container.innerHTML = creators.map((creator) => `
-    <article class="admin-creator-row">
+    <article class="admin-creator-row" data-admin-creator-name="${escapeHtml(creator.name.toLowerCase())}">
       <div><strong>${escapeHtml(creator.name)}</strong><span>${escapeHtml(creator.id)}</span></div>
-      <span>${escapeHtml(creator.platforms.join(", ") || "-")}</span>
-      <span>${escapeHtml(creator.createdAt || "-")}</span>
-      <span>${creator.confirmedContentCount} / ${creator.reviewCandidateCount} / ${creator.followUpCount}</span>
+      <span>${escapeHtml(creator.primaryPlatform || creator.platforms.join(", ") || "-")}</span>
+      <span>${escapeHtml(creator.primaryChannel || "-")}</span>
+      <span>${escapeHtml(creator.syncStatus || "-")} ${escapeHtml(creator.lastSync || "")}</span>
       <span>${escapeHtml(creator.status)}</span>
       <button class="button button-danger-secondary" data-admin-delete-creator="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.delete"))}</button>
     </article>
@@ -95,13 +95,17 @@ function renderAudit(audit) {
 
   container.innerHTML = audit.map((event) => `
     <article class="audit-row">
-      <strong>${escapeHtml(event.action)}</strong>
+      <strong>${escapeHtml(formatAuditAction(event.action))}</strong>
       <span>${escapeHtml(event.username || t("common.unknown"))} / ${escapeHtml(event.discord_id || t("admin.anonymous"))}</span>
       <span>${escapeHtml(event.creator_id || "-")} ${escapeHtml(event.field || "")}</span>
-      <code>${escapeHtml(event.old_value || "")} -> ${escapeHtml(event.new_value || "")}</code>
+      <details><summary>${escapeHtml(t("admin.details"))}</summary><code>${escapeHtml(event.old_value || "")} → ${escapeHtml(event.new_value || "")}</code></details>
       <time>${escapeHtml(event.timestamp)}</time>
     </article>
   `).join("");
+}
+
+function formatAuditAction(action) {
+  return String(action || "").replace(/[._]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function getInitials(name) {

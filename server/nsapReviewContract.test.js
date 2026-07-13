@@ -22,10 +22,11 @@ const {
 const CHANNEL_ID = "UC1234567890123456789012";
 const PRIMARY_URL = "https://www.youtube.com/watch?v=contract-primary";
 const FEED = `<?xml version="1.0"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"><entry><yt:videoId>contract-primary</yt:videoId><title>Night Shift at Paul's contract candidate</title><published>2026-07-12T10:00:00+00:00</published><link rel="alternate" href="${PRIMARY_URL}"/></entry><entry><yt:videoId>contract-older</yt:videoId><title>NSAP Roblox older match</title><published>2026-07-01T10:00:00+00:00</published><link rel="alternate" href="https://www.youtube.com/watch?v=contract-older"/></entry></feed>`;
+const VIDEO_HTML = `<meta property="og:title" content="Night Shift at Paul's imported short"><meta itemprop="datePublished" content="2026-07-13"><script>{"channelId":"${CHANNEL_ID}","ownerChannelName":"Contract Creator","publishDate":"2026-07-13"}</script>`;
 
 async function run() {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => response(FEED);
+  globalThis.fetch = async (url) => response(String(url).includes("/watch?") ? VIDEO_HTML : FEED);
   let server;
 
   try {
@@ -58,6 +59,14 @@ async function run() {
       "x-csrf-token": csrfToken,
     };
     const creatorPath = `${baseUrl}/api/creators/${encodeURIComponent(synced.id)}`;
+    const quickNoteResponse = await originalFetch(creatorPath, { method: "PATCH", headers, body: JSON.stringify({ field: "quickNote", value: "Owner editable Quick Note" }) });
+    assert.equal(quickNoteResponse.status, 200, "owner must be able to save Quick Notes");
+    assert.equal((await quickNoteResponse.json()).creator.quickNote, "Owner editable Quick Note");
+    const imported = await postJson(originalFetch, `${creatorPath}/youtube/import`, headers, { url: "https://youtu.be/abcdefghijk" });
+    assert.equal(imported.status, 200);
+    assert.equal(imported.body.status, "pending", "linked imported video must enter the existing review pipeline");
+    const duplicateImport = await postJson(originalFetch, `${creatorPath}/youtube/import`, headers, { url: "https://www.youtube.com/shorts/abcdefghijk" });
+    assert.equal(duplicateImport.body.status, "pending", "duplicate pending video must not create a second candidate");
     const endpoint = `${creatorPath}/youtube/nsap-decision`;
     const syncResult = await postJson(originalFetch, `${creatorPath}/sync/youtube`, headers, {});
     assert.equal(syncResult.status, 200);

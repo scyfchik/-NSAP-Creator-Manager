@@ -14,7 +14,7 @@ async function main() {
   let creator;
   try {
     await db.initDatabase();
-    creator = await db.createCreator(validateNewCreator({ name: creatorId }), actor, "127.0.0.1");
+    creator = await db.createCreator(validateNewCreator({ name: creatorId, platform: "YouTube", youtubeUrl: "https://youtube.com/@persistence-audit" }), actor, "127.0.0.1");
     creator = await db.updateCreatorProfile({
       creatorId: creator.id,
       updates: validateProfileUpdate({

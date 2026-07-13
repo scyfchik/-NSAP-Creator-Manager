@@ -38,7 +38,7 @@ function createYouTubeClient({ fetchImpl = globalThis.fetch, mappingStore, throt
   const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", removeNSPrefix: true, trimValues: true });
 
   async function syncCreator(creator, options = {}) {
-    const youtubeUrl = creator.youtubeUrl || (creator.platform === "YouTube" ? creator.url : "");
+    const youtubeUrl = creator.platform === "YouTube" ? (creator.youtubeUrl || creator.url) : "";
     if (!youtubeUrl) {
       if (["TikTok", "Twitch", "X", "X/Twitter"].includes(creator.platform)) {
         throw new YouTubeSyncError("manual", "Manual Update Required");
@@ -49,6 +49,25 @@ function createYouTubeClient({ fetchImpl = globalThis.fetch, mappingStore, throt
     const channelId = channel.channelId || await resolveHandle(channel, youtubeUrl);
     const feed = await fetchFeed(channelId);
     return { ...selectYouTubeFeed(feed.entries, options.excludedVideoUrls), channelId, entries: feed.entries };
+  }
+
+  async function resolveCreatorChannelId(creator) {
+    const youtubeUrl = creator.platform === "YouTube" ? (creator.youtubeUrl || creator.url) : creator.youtubeUrl;
+    if (!youtubeUrl) return "";
+    const channel = parseYouTubeChannelUrl(youtubeUrl);
+    return channel.channelId || resolveHandle(channel, youtubeUrl);
+  }
+
+  async function getVideoMetadata(value) {
+    const { videoId, canonicalUrl } = parseYouTubeVideoUrl(value);
+    const response = await request(canonicalUrl, "text/html");
+    const html = await limitedText(response);
+    const title = decodeHtml(readMeta(html, "og:title") || readJsonString(html, "title"));
+    const channelId = extractChannelIdFromHtml(html);
+    const channelName = decodeHtml(readJsonString(html, "ownerChannelName") || readJsonString(html, "author"));
+    const publishedDate = (readJsonString(html, "publishDate") || readMeta(html, "datePublished")).slice(0, 10);
+    if (!title || !channelId || !publishedDate) throw new YouTubeSyncError("metadata_unavailable", "YouTube video metadata is unavailable.");
+    return { videoId, title, publishedDate, channelId, channelName, canonicalUrl };
   }
 
   async function resolveHandle(channel, originalUrl) {
@@ -90,8 +109,33 @@ function createYouTubeClient({ fetchImpl = globalThis.fetch, mappingStore, throt
     });
   }
 
-  return { syncCreator, clearCache: () => rssCache.clear() };
+  return { syncCreator, resolveCreatorChannelId, getVideoMetadata, clearCache: () => rssCache.clear() };
 }
+
+function parseYouTubeVideoUrl(value) {
+  let url;
+  try { url = new URL(String(value || "").trim()); } catch { throw new YouTubeSyncError("invalid_url", "Invalid YouTube video URL."); }
+  const host = url.hostname.toLowerCase();
+  if (url.protocol !== "https:" || ![...YOUTUBE_HOSTS, "youtu.be"].includes(host)) throw new YouTubeSyncError("invalid_url", "Invalid YouTube video URL.");
+  const parts = url.pathname.split("/").filter(Boolean);
+  const videoId = host === "youtu.be" ? parts[0] : parts[0] === "watch" ? url.searchParams.get("v") : ["shorts", "live"].includes(parts[0]) ? parts[1] : "";
+  if (!/^[A-Za-z0-9_-]{11}$/.test(videoId || "")) throw new YouTubeSyncError("invalid_url", "Unsupported YouTube video URL.");
+  return { videoId, canonicalUrl: `https://www.youtube.com/watch?v=${videoId}` };
+}
+
+function readMeta(html, property) {
+  const patterns = [
+    new RegExp(`<meta[^>]+(?:property|itemprop|name)=["']${property}["'][^>]+content=(["'])(.*?)\\1`, "i"),
+    new RegExp(`<meta[^>]+content=(["'])(.*?)\\1[^>]+(?:property|itemprop|name)=["']${property}["']`, "i"),
+  ];
+  return patterns.map((pattern) => html.match(pattern)?.[2]).find(Boolean) || "";
+}
+
+function readJsonString(html, key) {
+  return html.match(new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`))?.[1]?.replace(/\\u0026/g, "&").replace(/\\"/g, '"') || "";
+}
+
+function decodeHtml(value) { return String(value || "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'"); }
 
 function parseYouTubeChannelUrl(value) {
   let url;
@@ -169,4 +213,4 @@ async function limitedText(response) {
   return (await response.text()).slice(0, 2_000_000);
 }
 
-module.exports = { RequestThrottle, YouTubeSyncError, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed, selectYouTubeFeed };
+module.exports = { RequestThrottle, YouTubeSyncError, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeVideoUrl, parseYouTubeFeed, selectYouTubeFeed };

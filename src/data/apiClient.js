@@ -104,6 +104,9 @@ export const api = {
   syncYouTubeCreator(creatorId) {
     return request(`/api/creators/${encodeURIComponent(creatorId)}/sync/youtube`, { method: "POST", body: JSON.stringify({}) });
   },
+  importYouTubeVideo(creatorId, url) {
+    return request(`/api/creators/${encodeURIComponent(creatorId)}/youtube/import`, { method: "POST", body: JSON.stringify({ url }) });
+  },
   getNsapReviewState(creatorId) {
     return request(`/api/creators/${encodeURIComponent(creatorId)}/youtube/review-candidate`);
   },

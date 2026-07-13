@@ -51,15 +51,13 @@ Looking forward to hearing from you!
 
 const profileFields = [
   ["name", "field.creatorName", "text", true],
+  ["channel", "field.primaryHandle", "text"],
   ["discordUsername", "field.discordUsername", "text"],
   ["discordId", "field.discordId", "text"],
   ["youtubeUrl", "field.youtubeUrl", "url"],
   ["tiktokUrl", "field.tiktokUrl", "url"],
   ["twitchUrl", "field.twitchUrl", "url"],
-  ["twitterUrl", "field.twitterUrl", "url"],
-  ["robloxUsername", "field.robloxUsername", "text"],
   ["category", "field.category", "text"],
-  ["quickNote", "profile.quickNote", "text"],
   ["followUpDate", "field.followUpDate", "date"],
   ["lastUploadDate", "field.lastUpload", "date"],
   ["notes", "profile.notes", "textarea"],
@@ -80,13 +78,13 @@ export function openAddCreatorModal() {
       <h4>${escapeHtml(t("profile.creatorProfile"))}</h4>
       <div class="modal-form notes-section" id="addCreatorForm">
         ${renderInput("name", t("field.creatorName"), "", "text", true)}
+        ${renderSelect("platform", t("field.primaryPlatform"), "YouTube", ["YouTube", "TikTok", "Twitch"])}
+        ${renderInput("channel", t("field.primaryHandle"))}
         ${renderInput("discordUsername", t("field.discordUsername"))}
         ${renderInput("discordId", t("field.discordId"))}
         ${renderInput("youtubeUrl", t("field.youtubeUrl"), "", "url")}
         ${renderInput("tiktokUrl", t("field.tiktokUrl"), "", "url")}
         ${renderInput("twitchUrl", t("field.twitchUrl"), "", "url")}
-        ${renderInput("twitterUrl", t("field.twitterUrl"), "", "url")}
-        ${renderInput("robloxUsername", t("field.robloxUsername"))}
         ${renderSelect("status", t("filter.status"), "Active", ["Active", "Inactive", "On Break"])}
         ${renderSelect("priority", t("filter.priority"), "Medium", ["High", "Medium", "Low"])}
         ${renderInput("category", t("field.category"), "Content Creator")}
@@ -113,7 +111,7 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
   const metricItems = renderMetricItems(creator);
   const latestNsapVideoUrl = getPlatformUrl(creator.latestNsapVideoUrl, ["youtube.com", "youtu.be"]);
   const latestChannelVideoUrl = getPlatformUrl(creator.latestChannelVideoUrl, ["youtube.com", "youtu.be"]);
-  const canYouTubeSync = Boolean(creator.youtubeUrl || creator.platform === "YouTube");
+  const canYouTubeSync = creator.platform === "YouTube" && Boolean(creator.youtubeUrl || creator.url);
 
   document.getElementById("modalName").textContent = creator.name;
   document.getElementById("modalBody").innerHTML = `
@@ -136,7 +134,8 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
         <button class="button button-secondary" data-copy-template="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.copyReminder"))}</button>
         ${permissions.canEdit ? `<button class="button button-secondary" data-mark-dm-sent="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.markDm"))}</button>` : ""}
         ${permissions.canEdit ? `<button class="button button-secondary" data-edit-profile="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.edit"))}</button>` : ""}
-        ${permissions.canEdit && canYouTubeSync ? `<button class="button button-secondary" data-sync-youtube="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.syncYoutube"))}</button>` : ""}
+        ${permissions.canEdit && canYouTubeSync ? `<button class="button button-secondary" data-sync-youtube="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.syncPrimary"))}</button>` : ""}
+        ${permissions.canEdit ? `<button class="button button-secondary" data-open-import-video="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.importVideoUrl"))}</button>` : ""}
         ${latestNsapVideoUrl ? `<a class="button button-secondary" href="${escapeHtml(latestNsapVideoUrl)}" target="_blank" rel="noreferrer">${escapeHtml(t("profile.openNsapVideo"))}</a>` : ""}
       </div>
     </div>
@@ -145,7 +144,7 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
       <section class="modal-section profile-section">
         <h4>${escapeHtml(t("profile.overview"))}</h4>
         <div class="modal-grid overview-grid">
-        ${renderReadOnly(t("profile.quickNote"), escapeHtml(formatOptional(creator.quickNote, t("profile.noQuickNote"))))}
+        ${permissions.canEdit ? `<label class="profile-quick-note"><span>${escapeHtml(t("profile.quickNote"))}</span><textarea id="profileQuickNote" data-profile-quick-note="${escapeHtml(creator.id)}" rows="3" maxlength="240">${escapeHtml(creator.quickNote || "")}</textarea><small id="profileQuickNoteState" class="field-save-status state-idle">${escapeHtml(t("save.saved"))}</small></label>` : renderReadOnly(t("profile.quickNote"), escapeHtml(formatOptional(creator.quickNote, t("profile.noQuickNote"))))}
         ${renderReadOnly(t("profile.followUp"), escapeHtml(formatOptional(creator.followUpDate, t("profile.noFollowUp"))))}
         ${renderReadOnly(t("profile.lastNsapUpload"), escapeHtml(formatOptional(creator.latestNsapUploadDate, t("profile.noMatchedUpload"))))}
         ${renderReadOnly(t("profile.nsapUploadAge"), `<b class="age age-${health.tone}">${escapeHtml(health.label)} / ${escapeHtml(health.age)}</b>`)}
@@ -155,6 +154,17 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
         ${renderReadOnly(t("profile.syncStatus"), escapeHtml(getSyncStatusLabel(creator)))}
         </div>
       </section>
+
+      ${creator.syncResult ? `<section class="modal-section profile-section"><h4>${escapeHtml(t("sync.lastResult"))}</h4><div class="modal-grid overview-grid">
+        ${Number.isInteger(creator.syncResult.fetchedEntries) ? renderReadOnly(t("sync.fetchedEntries"), escapeHtml(creator.syncResult.fetchedEntries)) : ""}
+        ${Number.isInteger(creator.syncResult.newCandidates) ? renderReadOnly(t("sync.newCandidates"), escapeHtml(creator.syncResult.newCandidates)) : ""}
+        ${Number.isInteger(creator.syncResult.matched) ? renderReadOnly(t("sync.matched"), escapeHtml(creator.syncResult.matched)) : ""}
+        ${Number.isInteger(creator.syncResult.ambiguous) ? renderReadOnly(t("sync.ambiguous"), escapeHtml(creator.syncResult.ambiguous)) : ""}
+        ${Number.isInteger(creator.syncResult.ignored) ? renderReadOnly(t("sync.ignored"), escapeHtml(creator.syncResult.ignored)) : ""}
+        ${Number.isInteger(creator.syncResult.duplicates) ? renderReadOnly(t("sync.duplicates"), escapeHtml(creator.syncResult.duplicates)) : ""}
+        ${creator.syncResult.timestamp ? renderReadOnly(t("profile.lastSync"), escapeHtml(formatLocalizedDateTime(creator.syncResult.timestamp))) : ""}
+        ${creator.syncResult.error ? renderReadOnly(t("sync.error"), escapeHtml(creator.syncResult.error)) : ""}
+      </div></section>` : ""}
 
       <section class="modal-section profile-section">
         <h4>${escapeHtml(t("profile.contacts"))}</h4>
@@ -237,6 +247,7 @@ export function renderEditProfileModal(creator) {
     <section class="modal-section danger-confirmation">
       <h4>${escapeHtml(t("profile.fields"))}</h4>
       <div class="modal-form notes-section" id="editCreatorForm" data-editing-creator="${escapeHtml(creator.id)}">
+        ${renderSelect("platform", t("field.primaryPlatform"), creator.platform, ["YouTube", "TikTok", "Twitch"])}
         ${profileFields.map(([field, labelKey, type, required]) => {
           const label = t(labelKey);
           if (field === "notes") {
@@ -255,6 +266,11 @@ export function renderEditProfileModal(creator) {
       </div>
     </section>
   `;
+}
+
+export function renderImportVideoModal(creator) {
+  document.getElementById("modalName").textContent = t("profile.importVideoUrl");
+  document.getElementById("modalBody").innerHTML = `<section class="modal-section"><p class="settings-copy">${escapeHtml(t("profile.importVideoHelp", { name: creator.name }))}</p><label class="field field-wide"><span>${escapeHtml(t("profile.videoUrl"))}</span><input id="importVideoUrl" type="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=..." /></label><div id="importVideoResult"></div><div class="button-row modal-actions-row"><button class="button button-secondary" data-cancel-profile-edit="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("common.cancel"))}</button><button class="button button-primary" data-import-video="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.importVideo"))}</button></div></section>`;
 }
 
 export function renderDeleteWarningModal(creator) {
@@ -370,19 +386,15 @@ function renderReadOnly(label, value) {
 }
 
 function renderContactItems(creator) {
-  const explicitUrls = [creator.youtubeUrl, creator.tiktokUrl, creator.twitchUrl, creator.twitterUrl]
-    .map((value) => safeUrl(value))
-    .filter(Boolean);
-  const legacyChannel = getPlatformUrl(creator.url, ["youtube.com", "youtu.be", "tiktok.com", "twitch.tv", "x.com", "twitter.com"]);
-  return [
-    creator.discordUsername ? renderCompactDetail("Discord", escapeHtml(creator.discordUsername)) : "",
-    creator.robloxUsername ? renderCompactDetail("Roblox", escapeHtml(creator.robloxUsername)) : "",
-    renderSocialDetail("YouTube", creator.youtubeUrl, ["youtube.com", "youtu.be"]),
-    renderSocialDetail("TikTok", creator.tiktokUrl, ["tiktok.com"]),
-    renderSocialDetail("Twitch", creator.twitchUrl, ["twitch.tv"]),
-    renderSocialDetail("X / Twitter", creator.twitterUrl, ["x.com", "twitter.com"]),
-    legacyChannel && !explicitUrls.includes(legacyChannel) ? renderCompactDetail(t("field.primaryChannel"), `<a href="${escapeHtml(legacyChannel)}" target="_blank" rel="noreferrer">${escapeHtml(legacyChannel)}</a>`) : "",
-  ].filter(Boolean).join("");
+  const platforms = [
+    ["YouTube", creator.youtubeUrl, ["youtube.com", "youtu.be"]],
+    ["TikTok", creator.tiktokUrl, ["tiktok.com"]],
+    ["Twitch", creator.twitchUrl, ["twitch.tv"]],
+  ];
+  const primaryUrl = getPrimaryChannelUrl(creator);
+  const primary = renderCompactDetail(t("field.primaryChannel"), primaryUrl ? `<a href="${escapeHtml(primaryUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creator.platform)} · ${escapeHtml(creator.channel || primaryUrl)}</a>${creator.primaryChannelId ? `<small>${escapeHtml(creator.primaryChannelId)}</small>` : ""}` : escapeHtml(`${creator.platform}: ${creator.channel || t("common.unknown")}`));
+  const additional = platforms.filter(([platform, value]) => platform !== creator.platform && safeUrl(value)).map(([platform, value, hosts]) => renderSocialDetail(platform, value, hosts)).join("");
+  return [primary, additional ? `<div class="compact-detail platform-list-label"><span>${escapeHtml(t("field.additionalPlatforms"))}</span></div>${additional}` : "", creator.discordUsername ? renderCompactDetail("Discord", escapeHtml(creator.discordUsername)) : ""].filter(Boolean).join("");
 }
 
 function renderMetricItems(creator) {
@@ -411,10 +423,6 @@ function getPrimaryChannelUrl(creator) {
   };
   const candidates = [
     ...(platformCandidates[creator.platform] || []),
-    [creator.youtubeUrl, ["youtube.com", "youtu.be"]],
-    [creator.tiktokUrl, ["tiktok.com"]],
-    [creator.twitchUrl, ["twitch.tv"]],
-    [creator.twitterUrl, ["x.com", "twitter.com"]],
     [creator.url, ["youtube.com", "youtu.be", "tiktok.com", "twitch.tv", "x.com", "twitter.com"]],
   ];
   for (const [value, hosts] of candidates) {
@@ -437,7 +445,7 @@ function renderNsapReview(creator, permissions, reviewState) {
   const hasManualDecision = Boolean(creator.nsapDecisionVideoUrl || creator.nsapDecisionActor || creator.nsapDecisionAt);
   const candidateDetails = candidate
     ? `<div class="review-candidate-card">
-      <div class="review-candidate-label"><span class="badge ${/potential|ambiguous/i.test(candidate.matchReason || "") ? "badge-tone-watch" : "badge-tone-good"}"><span class="badge-dot"></span>${escapeHtml(/potential|ambiguous/i.test(candidate.matchReason || "") ? t("review.ambiguous") : t("review.matched"))}</span></div>
+      <div class="review-candidate-label"><span class="badge ${candidate.matchClassification === "matched" ? "badge-tone-good" : "badge-tone-watch"}"><span class="badge-dot"></span>${escapeHtml(candidate.matchClassification === "matched" ? t("review.matched") : candidate.matchClassification === "ambiguous" ? t("review.ambiguous") : t("sync.ignored"))}</span></div>
       <div class="modal-grid overview-grid">
         ${renderReadOnly(t("review.candidateTitle"), escapeHtml(candidate.title))}
         ${renderReadOnly(t("review.uploadDate"), escapeHtml(formatLocalizedDate(candidate.uploadDate)))}

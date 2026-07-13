@@ -38,7 +38,7 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
       const reviews = await dbApi.getCreatorNsapReviews(creatorId);
       const excludedVideoUrls = reviews.filter((review) => review.decision === NSAP_REVIEW_DECISION.REJECT).map((review) => review.video_url);
       const upload = await client.syncCreator(creator, { excludedVideoUrls });
-      const result = reconcileNsapResult(creator, upload);
+      const result = { ...reconcileNsapResult(creator, upload), primaryChannelId: upload.channelId, syncResult: summarizeSync(upload.entries, reviews, lastSync) };
       const updated = await dbApi.updateCreatorYouTubeSync({ creatorId, user, ip, result: { ...result, lastSync, syncStatus: "synced", syncError: "" } });
       const state = createReviewState(upload.entries, excludedVideoUrls);
       reviewStates.set(creatorId, state);
@@ -55,6 +55,7 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
           lastSync,
           syncStatus: normalized.status,
           syncError: normalized.message,
+          syncResult: { timestamp: lastSync, error: normalized.message },
           nsapMatchStatus: manualStatus || (normalized.status === "manual" ? "unsupported" : "sync_failed"),
           nsapMatchReason: manualStatus ? creator.nsapMatchReason : normalized.message,
         },
@@ -113,6 +114,27 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
     return { creator, review: toPublicReviewState(state) };
   }
 
+  async function importVideo(creatorId, videoUrl) {
+    const creator = await dbApi.getCreator(creatorId);
+    if (!creator || creator.deleted) return null;
+    const metadata = await client.getVideoMetadata(videoUrl);
+    const currentCandidate = getCurrentCandidate(reviewStates.get(creatorId));
+    if (currentCandidate?.url === metadata.canonicalUrl) return { creator, status: "pending", metadata, review: getReviewState(creatorId) };
+    const reviews = await dbApi.getCreatorNsapReviews(creatorId);
+    const existing = reviews.find((review) => review.video_url === metadata.canonicalUrl);
+    if (existing) return { creator, status: existing.decision === NSAP_REVIEW_DECISION.CONFIRM ? "confirmed" : "rejected", metadata, review: getReviewState(creatorId) };
+    const linkedChannelId = await client.resolveCreatorChannelId(creator);
+    if (!linkedChannelId || linkedChannelId !== metadata.channelId) {
+      return { creator, status: "unknown_channel", metadata, options: ["link_channel", "create_creator", "cancel"], review: getReviewState(creatorId) };
+    }
+    const entry = { title: metadata.title, url: metadata.canonicalUrl, published: metadata.publishedDate, description: "" };
+    const match = matchNsapContent(entry);
+    const normalized = normalizeReviewEntry(entry);
+    const state = { sourceEntries: [entry], entries: [normalized], cursor: 0, rejectedUrls: new Set(), skippedUrls: new Set(), checkedUrls: new Set(), status: "ready" };
+    reviewStates.set(creatorId, state);
+    return { creator, status: "pending", metadata, match, review: toPublicReviewState(state) };
+  }
+
   async function startSyncAll(user, ip) {
     const creators = await dbApi.getCreators();
     const job = { id: crypto.randomUUID(), status: "queued", total: creators.length, completed: 0, failed: 0, currentCreator: "", startedAt: new Date().toISOString(), finishedAt: "" };
@@ -139,7 +161,21 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
 
   function getJob(id) { const job = jobs.get(id); return job ? { ...job } : null; }
   function pruneJobs() { while (jobs.size > 50) jobs.delete(jobs.keys().next().value); }
-  return { getJob, getReviewState, reviewCreator, showNextCandidate, startSyncAll, syncCreator };
+  return { getJob, getReviewState, importVideo, reviewCreator, showNextCandidate, startSyncAll, syncCreator };
+}
+
+function summarizeSync(entries, reviews, timestamp) {
+  const existingUrls = new Set((reviews || []).map((review) => review.video_url));
+  const matches = (entries || []).map((entry) => matchNsapContent(entry));
+  return {
+    fetchedEntries: entries.length,
+    newCandidates: entries.filter((entry, index) => !existingUrls.has(entry.url) && isNsapReviewCandidate(matches[index])).length,
+    matched: matches.filter((match) => match.classification === "matched").length,
+    ambiguous: matches.filter((match) => match.classification === "ambiguous").length,
+    ignored: matches.filter((match) => !isNsapReviewCandidate(match)).length,
+    duplicates: entries.filter((entry) => existingUrls.has(entry.url)).length,
+    timestamp,
+  };
 }
 
 function createReviewState(sourceEntries = [], rejectedVideoUrls = []) {
@@ -208,6 +244,7 @@ function toPublicReviewState(state) {
     url: current.url,
     uploadDate: current.uploadDate,
     matchReason: current.match.reason,
+    matchClassification: current.match.classification,
     index: state.cursor + 1,
     total: state.entries.length,
   } : null;

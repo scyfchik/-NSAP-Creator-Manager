@@ -3037,6 +3037,14 @@ input[type="checkbox"] {
   overflow-x: auto;
 }
 
+.admin-tabs { display: flex; gap: 8px; margin-bottom: 18px; overflow-x: auto; }
+[data-admin-panel][hidden] { display: none !important; }
+.admin-tabs .active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.admin-creator-search { display: grid; gap: 6px; margin: 0 0 14px; max-width: 360px; color: var(--muted); font-size: 11px; }
+.profile-quick-note { display: grid; gap: 7px; grid-column: 1 / -1; }
+.profile-quick-note textarea { resize: vertical; }
+.import-result { margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+
 .admin-creator-head,
 .admin-creator-row {
   display: grid;

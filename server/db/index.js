@@ -266,7 +266,8 @@ async function createCreator(creator,user,ip) {
   return db.transaction(async(tx)=>{ const all=await getCreators({},tx); assertUnique(all,creator); let id=creator.id||"creator",n=2; while(await getCreator(id,tx))id=`${creator.id||"creator"}-${n++}`; const safe={...creator,id,deleted:false,createdAt:creator.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()}; await upsertCreator(safe,tx); await syncTimeline(safe,tx); await insertAudit({user,action:"creator.create",creatorId:id,newValue:safe.name,ip},tx); return safe; });
 }
 async function updateCreatorField({creatorId,field,value,user,ip}) { return mutateCreator({creatorId,user,ip,action:"creator.update",field,mutate(c){if(c[field]===value)return false;c[field]=value;if(field==="followUpDate")c.followUp=value?"Yes":"No";c.history=Array.isArray(c.history)?c.history:[];c.history.unshift({type:"Creator Updated",date:new Date().toISOString().slice(0,10),note:`${field} changed to ${value||"empty"}.`});return value;}}); }
-async function updateCreatorProfile({creatorId,updates,user,ip}) { return db.transaction(async(tx)=>{const c=await getCreator(creatorId,tx);if(!c||c.deleted)return null;const old={},next={};for(const [k,v] of Object.entries(updates)){if(c[k]!==v){old[k]=c[k]??"";next[k]=v;c[k]=v;}}if(!Object.keys(next).length)return c;if(Object.hasOwn(next,"followUpDate")){c.followUp=c.followUpDate?"Yes":"No";appendTimeline(c,normalizeTimelineEntry({type:"followup_set",message:c.followUpDate?`Set follow-up for ${c.followUpDate}.`:"Cleared follow-up date."},user));}c.updatedAt=new Date().toISOString();await upsertCreator(c,tx);await syncTimeline(c,tx);await insertAudit({user,action:"creator.profile.update",creatorId,field:"profile",oldValue:old,newValue:next,ip},tx);return getCreator(creatorId,tx);}); }
+async function updateCreatorProfile({creatorId,updates,user,ip}) { return db.transaction(async(tx)=>{const c=await getCreator(creatorId,tx);if(!c||c.deleted)return null;const old={},next={};for(const [k,v] of Object.entries(updates)){if(c[k]!==v){old[k]=c[k]??"";next[k]=v;c[k]=v;}}if(!Object.keys(next).length)return c;if(["platform","youtubeUrl","tiktokUrl","twitchUrl"].some((field)=>Object.hasOwn(next,field))&&!hasPrimaryChannelUrl(c)){const error=new Error(`${c.platform} Primary Channel URL is required.`);error.status=400;throw error;}if(Object.hasOwn(next,"followUpDate")){c.followUp=c.followUpDate?"Yes":"No";appendTimeline(c,normalizeTimelineEntry({type:"followup_set",message:c.followUpDate?`Set follow-up for ${c.followUpDate}.`:"Cleared follow-up date."},user));}c.updatedAt=new Date().toISOString();await upsertCreator(c,tx);await syncTimeline(c,tx);await insertAudit({user,action:"creator.profile.update",creatorId,field:"profile",oldValue:old,newValue:next,ip},tx);return getCreator(creatorId,tx);}); }
+function hasPrimaryChannelUrl(c){if(c.platform==="YouTube")return Boolean(c.youtubeUrl||c.url);if(c.platform==="TikTok")return Boolean(c.tiktokUrl||c.url);if(c.platform==="Twitch")return Boolean(c.twitchUrl||c.url);return false;}
 async function softDeleteCreator({creatorId,user,ip}) { return mutateCreator({creatorId,user,ip,action:"creator.delete",field:"deleted",mutate(c){c.deleted=true;c.deletedAt=new Date().toISOString();c.status="Inactive";appendTimeline(c,normalizeTimelineEntry({type:"custom",message:"Creator deleted from active workspace."},user));return true;}}); }
 async function addTimelineEntry({creatorId,entry,user,ip,auditAction="creator.timeline.add"}) { return mutateCreator({creatorId,user,ip,action:auditAction,field:null,mutate(c){const item=normalizeTimelineEntry(entry,user);appendTimeline(c,item);return item;}}); }
 async function markDmSent({creatorId,user,ip}) { return mutateCreator({creatorId,user,ip,action:"creator.dm.mark_sent",field:"dmSent",mutate(c){c.dmSent="Yes";appendTimeline(c,normalizeTimelineEntry({type:"reminder_sent",message:"Marked DM sent."},user));return "Yes";}}); }
@@ -283,7 +284,7 @@ async function updateCreatorYouTubeSync({creatorId,result,user,ip}) {
       "latestChannelVideoTitle", "latestChannelVideoUrl", "latestChannelUploadDate",
       "latestNsapVideoTitle", "latestNsapVideoUrl", "latestNsapUploadDate",
       "nsapMatchStatus", "nsapMatchReason", "nsapMatchedKeyword", "nsapDecisionVideoTitle",
-      "nsapDecisionVideoUrl", "nsapDecisionVideoUploadDate", "nsapDecisionActor", "nsapDecisionAt",
+      "nsapDecisionVideoUrl", "nsapDecisionVideoUploadDate", "nsapDecisionActor", "nsapDecisionAt", "primaryChannelId", "syncResult",
     ];
     syncFields.forEach((field) => {
       if (Object.hasOwn(result, field)) creator[field] = result[field] || "";
@@ -312,6 +313,10 @@ async function getAdminCreators(tx = db) {
     reviewCandidateCount: reviewCounts.get(creator.id) || 0,
     followUpCount: creator.followUpDate || creator.followUp === "Yes" ? 1 : 0,
     status: creator.status || "Inactive",
+    primaryPlatform: creator.platform || "Unknown",
+    primaryChannel: creator.channel || creator.youtubeUrl || creator.tiktokUrl || creator.twitchUrl || "",
+    lastSync: creator.lastSync || "",
+    syncStatus: creator.syncStatus || "",
   }));
 }
 

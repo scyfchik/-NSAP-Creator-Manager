@@ -36,10 +36,11 @@ export function normalizePayload(payload) {
 export function normalizeCreator(creator, index) {
   const id = creator.id || createStableId(creator, index);
 
+  const primaryPlatform = ["YouTube", "TikTok", "Twitch"].includes(creator.platform) ? creator.platform : (creator.youtubeUrl ? "YouTube" : creator.tiktokUrl ? "TikTok" : creator.twitchUrl ? "Twitch" : creator.platform ?? "Unknown");
   return {
     id,
     name: creator.name ?? "Unnamed Creator",
-    platform: creator.platform ?? "Unknown",
+    platform: primaryPlatform,
     channel: creator.channel ?? "",
     url: creator.url ?? "",
     avatar: creator.avatar ?? "",
@@ -63,6 +64,8 @@ export function normalizeCreator(creator, index) {
     tiktokUrl: creator.tiktokUrl ?? "",
     twitchUrl: creator.twitchUrl ?? "",
     twitterUrl: creator.twitterUrl ?? "",
+    syncResult: creator.syncResult ?? null,
+    primaryChannelId: creator.primaryChannelId ?? "",
     subscriberCount: creator.subscriberCount ?? null,
     views: creator.views ?? null,
     averageViews: creator.averageViews ?? null,

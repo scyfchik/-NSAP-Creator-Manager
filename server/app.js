@@ -173,6 +173,14 @@ async function createApp() {
     res.json(result);
   }));
 
+  app.post("/api/creators/:id/youtube/import", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
+    const videoUrl = typeof req.body?.url === "string" ? req.body.url : "";
+    if (!videoUrl) return res.status(400).json({ error: "YouTube video URL is required" });
+    const result = await youtubeSync.importVideo(req.params.id, videoUrl);
+    if (!result) return res.status(404).json({ error: "Creator not found" });
+    res.json(result);
+  }));
+
   app.get("/api/creators/:id/youtube/review-candidate", requireCreatorEditor, asyncHandler(async (req, res) => {
     res.json({ review: youtubeSync.getReviewState(req.params.id) });
   }));

@@ -14,12 +14,14 @@ import {
   renderCreatorDetails,
   renderDeleteConfirmModal,
   renderDeleteWarningModal,
+  renderImportVideoModal,
   renderEditProfileModal,
 } from "./ui/modal.js";
 import { renderSettings } from "./ui/settings.js";
 import { showToast } from "./ui/toast.js";
 import { applyStaticTranslations, getLanguage, setLanguage, t } from "./i18n/index.js";
 import { NSAP_REVIEW_DECISION } from "./constants/nsapReview.js";
+import { escapeHtml } from "./utils/format.js";
 
 const unsavedMessage = () => t("common.unsavedPrompt");
 
@@ -72,6 +74,7 @@ let modalSaving = false;
 let settingsDirty = false;
 let settingsSaving = false;
 let modalSaveStateTimer = 0;
+let profileQuickNoteTimer = 0;
 let youtubeSyncJob = null;
 let youtubeSyncPollTimer = 0;
 let session = {
@@ -219,6 +222,8 @@ function wireEvents() {
   document.getElementById("usersList").addEventListener("change", handleUserRoleChange);
   document.getElementById("backupsList").addEventListener("click", handleBackupRestore);
   document.getElementById("adminCreatorsList").addEventListener("click", handleAdminCreatorAction);
+  document.getElementById("adminView").addEventListener("click", handleAdminTab);
+  document.getElementById("adminCreatorSearch").addEventListener("input", filterAdminCreators);
   document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
   document.getElementById("mobileMenuButton").addEventListener("click", toggleMobileNavigation);
   document.getElementById("sidebarResizer").addEventListener("pointerdown", handleSidebarResize);
@@ -376,6 +381,13 @@ function handleOpenCreatorClick(event) {
 
 function handleModalEdit(event) {
   const target = event.target;
+  if (target.id === "profileQuickNote") {
+    const indicator = document.getElementById("profileQuickNoteState");
+    if (indicator) { indicator.textContent = t("save.unsaved"); indicator.className = "field-save-status state-unsaved"; }
+    window.clearTimeout(profileQuickNoteTimer);
+    profileQuickNoteTimer = window.setTimeout(() => saveProfileQuickNote(target.dataset.profileQuickNote, target.value), 700);
+    return;
+  }
   if (target.id === "deleteConfirmation") {
     const button = document.querySelector("[data-confirm-delete]");
     if (button) button.disabled = target.value !== target.dataset.deleteName;
@@ -400,6 +412,31 @@ function handleModalClick(event) {
   const addButton = event.target.closest("[data-save-new-creator]");
   if (addButton) {
     createCreator(addButton);
+    return;
+  }
+
+  const openImport = event.target.closest("[data-open-import-video]");
+  if (openImport) {
+    const creator = getCreatorById(openImport.dataset.openImportVideo);
+    if (creator) renderImportVideoModal(creator);
+    return;
+  }
+
+  const importVideoButton = event.target.closest("[data-import-video]");
+  if (importVideoButton) {
+    importYouTubeVideo(importVideoButton.dataset.importVideo, importVideoButton);
+    return;
+  }
+
+  const linkImportedChannel = event.target.closest("[data-link-imported-channel]");
+  if (linkImportedChannel) {
+    linkYouTubeChannel(linkImportedChannel.dataset.linkImportedChannel, linkImportedChannel.dataset.channelId, linkImportedChannel.dataset.videoUrl, linkImportedChannel);
+    return;
+  }
+
+  const createImportedCreator = event.target.closest("[data-create-imported-creator]");
+  if (createImportedCreator) {
+    createCreatorFromImportedChannel(createImportedCreator.dataset.channelId, createImportedCreator.dataset.channelName, createImportedCreator.dataset.videoUrl, createImportedCreator);
     return;
   }
 
@@ -730,6 +767,18 @@ function handleAdminCreatorAction(event) {
   document.getElementById("creatorDialog").showModal();
 }
 
+function handleAdminTab(event) {
+  const button = event.target.closest("[data-admin-tab]");
+  if (!button) return;
+  document.querySelectorAll("[data-admin-tab]").forEach((item) => item.classList.toggle("active", item === button));
+  document.querySelectorAll("[data-admin-panel]").forEach((panel) => { panel.hidden = panel.dataset.adminPanel !== button.dataset.adminTab; });
+}
+
+function filterAdminCreators(event) {
+  const query = event.target.value.trim().toLowerCase();
+  document.querySelectorAll("[data-admin-creator-name]").forEach((row) => { row.hidden = Boolean(query) && !row.dataset.adminCreatorName.includes(query); });
+}
+
 async function addTimelineEntry(creatorId, button) {
   const message = document.getElementById("timelineMessage")?.value || "";
   const type = document.getElementById("timelineType")?.value || "note";
@@ -829,6 +878,74 @@ async function syncYouTubeCreator(creatorId) {
   } finally {
     pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
   }
+}
+
+async function saveProfileQuickNote(creatorId, value) {
+  const indicator = document.getElementById("profileQuickNoteState");
+  if (!session.permissions.canEdit) return;
+  if (indicator) { indicator.textContent = t("save.saving"); indicator.className = "field-save-status state-saving"; }
+  try {
+    const response = await api.updateCreator(creatorId, "quickNote", value);
+    replaceCreator(response.creator);
+    if (indicator) { indicator.textContent = t("save.saved"); indicator.className = "field-save-status state-saved"; }
+  } catch (error) {
+    if (indicator) { indicator.textContent = t("save.failed"); indicator.className = "field-save-status state-error"; }
+    showToast(error.message, "error");
+  }
+}
+
+async function importYouTubeVideo(creatorId, button) {
+  const url = document.getElementById("importVideoUrl")?.value.trim() || "";
+  if (!url) { showToast(t("profile.videoUrlRequired"), "error"); return; }
+  setSaveLoading(button, true);
+  try {
+    const response = await api.importYouTubeVideo(creatorId, url);
+    if (response.review) nsapReviewStates.set(creatorId, response.review);
+    const result = document.getElementById("importVideoResult");
+    if (result) result.innerHTML = `<p class="import-result import-result-${response.status}">${escapeImportResult(response)}</p>`;
+    if (response.status === "pending") {
+      showToast(t("profile.videoPending"));
+      const creator = getCreatorById(creatorId);
+      if (creator) renderCreatorDetails(creator, session.permissions, response.review);
+    } else if (response.status === "unknown_channel") {
+      showToast(t("profile.videoUnknownChannel"), "error");
+    } else showToast(t(`profile.videoStatus.${response.status}`));
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally { setSaveLoading(button, false); }
+}
+
+function escapeImportResult(response) {
+  const title = response.metadata?.title || "";
+  const message = response.status === "unknown_channel" ? t("profile.videoUnknownChannelOptions") : t(`profile.videoStatus.${response.status}`);
+  const options = response.status === "unknown_channel" ? `<div class="button-row"><button class="button button-secondary" data-link-imported-channel="${escapeHtml(response.creator.id)}" data-channel-id="${escapeHtml(response.metadata.channelId)}" data-video-url="${escapeHtml(response.metadata.canonicalUrl)}" type="button">${escapeHtml(t("profile.linkChannel"))}</button><button class="button button-secondary" data-create-imported-creator data-channel-id="${escapeHtml(response.metadata.channelId)}" data-channel-name="${escapeHtml(response.metadata.channelName || response.metadata.title)}" data-video-url="${escapeHtml(response.metadata.canonicalUrl)}" type="button">${escapeHtml(t("profile.createFromChannel"))}</button></div>` : "";
+  return `${escapeHtml(title)} — ${escapeHtml(message)}${options}`;
+}
+
+async function linkYouTubeChannel(creatorId, channelId, videoUrl, button) {
+  if (!window.confirm(t("profile.linkChannelConfirm"))) return;
+  setSaveLoading(button, true);
+  try {
+    const response = await api.updateCreatorProfile(creatorId, { youtubeUrl: `https://www.youtube.com/channel/${channelId}` });
+    replaceCreator(response.creator);
+    showToast(t("profile.channelLinked"));
+    renderImportVideoModal(response.creator);
+    document.getElementById("importVideoUrl").value = videoUrl;
+  } catch (error) { showToast(error.message, "error"); } finally { setSaveLoading(button, false); }
+}
+
+async function createCreatorFromImportedChannel(channelId, channelName, videoUrl, button) {
+  if (!window.confirm(t("profile.createFromChannelConfirm"))) return;
+  setSaveLoading(button, true);
+  try {
+    const response = await api.createCreator({ name: channelName || channelId, platform: "YouTube", channel: channelName || channelId, youtubeUrl: `https://www.youtube.com/channel/${channelId}` });
+    creators = [response.creator, ...creators];
+    activeCreatorId = response.creator.id;
+    renderImportVideoModal(response.creator);
+    document.getElementById("importVideoUrl").value = videoUrl;
+    renderAll();
+    showToast(t("message.creatorAdded"));
+  } catch (error) { showToast(error.message, "error"); } finally { setSaveLoading(button, false); }
 }
 
 async function loadNsapReviewState(creatorId) {

@@ -173,6 +173,9 @@ function run() {
   assert.match(dbSource, /DELETE FROM creators WHERE id/, "creator deletion must remove the creator row");
   assert.match(dbSource, /action: "creator_deleted"/, "creator deletion must preserve an audit event");
   assert.match(dbSource, /expectedName !== creator\.name/, "creator deletion must require an exact case-sensitive name");
+  assert.match(dbSource, /"syncResult"/, "last manual sync result must be persisted in the existing creator payload");
+  const permissionsSource = fs.readFileSync(path.join(__dirname, "..", "permissions.js"), "utf8");
+  assert.match(permissionsSource, /"quickNote"/, "Quick Notes must remain editable through the existing permission system");
   const appSource = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
   assert.match(appSource, /app\.delete\("\/api\/admin\/creators\/:id", requireCsrf, requireAdministrator/, "delete endpoint must require an authenticated administrator and CSRF protection");
   assert.doesNotMatch(appSource, /app\.delete\("\/api\/creators\/:id"/, "ordinary creator routes must not expose deletion");

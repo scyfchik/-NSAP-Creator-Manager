@@ -17,6 +17,8 @@ const timelineTypes = new Set([
 ]);
 const profileFields = new Set([
   "name",
+  "platform",
+  "channel",
   "discordUsername",
   "discordId",
   "youtubeUrl",
@@ -144,6 +146,8 @@ function normalizeCreator(creator, index) {
     lastSync: sanitizeText(creator.lastSync || creator.last_sync || "", 40),
     syncStatus: sanitizeText(creator.syncStatus || creator.sync_status || "", 40),
     syncError: sanitizeText(creator.syncError || creator.sync_error || "", 500),
+    syncResult: normalizeSyncResult(creator.syncResult),
+    primaryChannelId: sanitizeText(creator.primaryChannelId || "", 64),
     latestChannelVideoTitle: sanitizeText(creator.latestChannelVideoTitle || creator.latest_channel_video_title || "", 500),
     latestChannelVideoUrl: sanitizeUrl(creator.latestChannelVideoUrl || creator.latest_channel_video_url || ""),
     latestChannelUploadDate: sanitizeOptionalDate(creator.latestChannelUploadDate || creator.latest_channel_upload_date),
@@ -201,8 +205,8 @@ function validateNewCreator(payload) {
   const creator = normalizeCreator({
     ...payload,
     name,
-    platform: detectPrimaryPlatform(payload),
-    channel: payload?.discordUsername || payload?.robloxUsername || name,
+    platform: normalizePrimaryPlatform(payload?.platform || detectPrimaryPlatform(payload)),
+    channel: sanitizeText(payload?.channel || name, 160),
     status: payload?.status || "Active",
     priority: payload?.priority || "Medium",
     category: payload?.category || "Content Creator",
@@ -213,6 +217,9 @@ function validateNewCreator(payload) {
     updatedAt: now,
     history: [],
   }, 0);
+  if (!getPrimaryUrl(creator)) {
+    throwRequestError(`${creator.platform} Primary Channel URL is required.`, 400);
+  }
 
   creator.id = createStableId({ channel: creator.name, name: creator.name }, 0);
   creator.timeline = [
@@ -321,6 +328,10 @@ function sanitizeProfileValue(field, value) {
     return sanitizeDiscordId(value || "");
   }
 
+  if (field === "platform") {
+    return normalizePrimaryPlatform(value);
+  }
+
   if (field === "status") {
     if (!["Active", "Inactive", "On Break"].includes(value)) {
       throwRequestError("Invalid value for status.", 400);
@@ -352,6 +363,7 @@ function sanitizeProfileValue(field, value) {
 
   const limits = {
     name: 160,
+    channel: 160,
     discordUsername: 80,
     robloxUsername: 80,
     category: 80,
@@ -429,6 +441,30 @@ function detectPrimaryPlatform(payload = {}) {
     return "X/Twitter";
   }
   return "Unknown";
+}
+
+function normalizePrimaryPlatform(value) {
+  const platform = sanitizeText(value || "", 80);
+  if (!["YouTube", "TikTok", "Twitch"].includes(platform)) {
+    throwRequestError("Primary platform must be YouTube, TikTok or Twitch.", 400);
+  }
+  return platform;
+}
+
+function getPrimaryUrl(creator) {
+  if (creator.platform === "YouTube") return creator.youtubeUrl || creator.url;
+  if (creator.platform === "TikTok") return creator.tiktokUrl || creator.url;
+  if (creator.platform === "Twitch") return creator.twitchUrl || creator.url;
+  return "";
+}
+
+function normalizeSyncResult(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result = { timestamp: sanitizeOptionalTimestamp(value.timestamp), error: sanitizeText(value.error || "", 500) };
+  ["fetchedEntries", "newCandidates", "matched", "ambiguous", "ignored", "duplicates"].forEach((field) => {
+    if (Number.isInteger(value[field]) && value[field] >= 0) result[field] = value[field];
+  });
+  return result;
 }
 
 function sanitizeId(value, index) {

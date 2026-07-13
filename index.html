@@ -271,15 +271,22 @@
           </div>
         </div>
 
+        <div class="admin-tabs" role="tablist" aria-label="Admin sections">
+          <button class="button button-secondary active" data-admin-tab="users" type="button" data-i18n="admin.users">Users</button>
+          <button class="button button-secondary" data-admin-tab="creators" type="button" data-i18n="admin.creatorManagement">Creator Management</button>
+          <button class="button button-secondary" data-admin-tab="backups" type="button" data-i18n="admin.backups">Backups</button>
+          <button class="button button-secondary" data-admin-tab="audit" type="button" data-i18n="admin.audit">Audit Log</button>
+        </div>
+
         <div class="settings-grid">
-          <section class="panel admin-users-panel">
+          <section class="panel admin-users-panel" data-admin-panel="users">
             <div class="panel-head">
               <div><h4 data-i18n="admin.users">Users</h4><p data-i18n="admin.usersDescription">Discord accounts and assigned roles</p></div>
             </div>
             <div class="admin-list" id="usersList"></div>
           </section>
 
-          <section class="panel admin-backups-panel">
+          <section class="panel admin-backups-panel" data-admin-panel="backups" hidden>
             <div class="panel-head">
               <div><h4 data-i18n="admin.backups">Backups</h4><p data-i18n="admin.backupsDescription">Restore points stored by the server</p></div>
             </div>
@@ -287,15 +294,16 @@
           </section>
         </div>
 
-        <section class="panel admin-creators-panel">
+        <section class="panel admin-creators-panel" data-admin-panel="creators" hidden>
           <div class="panel-head">
             <div><h4 data-i18n="admin.creatorManagement">Creator Management</h4><p data-i18n="admin.creatorManagementDescription">Permanent creator deletion and related record counts</p></div>
           </div>
-          <div class="admin-creator-head"><span>Creator / ID</span><span>Platforms</span><span>Created</span><span>Confirmed / Review / Follow-ups</span><span>Status</span><span></span></div>
+          <label class="admin-creator-search"><span data-i18n="common.search">Search</span><input id="adminCreatorSearch" type="search" data-i18n-placeholder="admin.searchCreators" placeholder="Search creators..." /></label>
+          <div class="admin-creator-head"><span>Creator / ID</span><span>Primary platform</span><span>Primary channel</span><span>Last sync</span><span>Status</span><span></span></div>
           <div class="admin-list" id="adminCreatorsList"></div>
         </section>
 
-        <section class="panel audit-panel">
+        <section class="panel audit-panel" data-admin-panel="audit" hidden>
           <div class="panel-head">
             <div><h4 data-i18n="admin.audit">Audit Log</h4><p data-i18n="admin.auditDescription">Immutable record of administrative changes</p></div>
           </div>

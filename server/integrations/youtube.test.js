@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { WEAK_ALIASES, WEAK_SIGNAL_SCORE, matchNsapContent } = require("./nsapContentMatcher");
 const { validateNsapDecision } = require("../validation");
-const { RequestThrottle, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed, selectYouTubeFeed } = require("./youtube");
+const { RequestThrottle, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeVideoUrl, parseYouTubeFeed, selectYouTubeFeed } = require("./youtube");
 const { TaskQueue, createYouTubeSyncManager, reconcileNsapResult } = require("./youtubeSync");
 const { DECISION: NSAP_REVIEW_DECISION } = require("../../shared/nsapReviewContract");
 
@@ -31,6 +31,16 @@ const REVIEW_FEED = makeFeed(REVIEW_TITLES);
 async function run() {
   assert.equal(parseYouTubeChannelUrl(`https://youtube.com/channel/${CHANNEL_ID}`).channelId, CHANNEL_ID);
   assert.equal(parseYouTubeChannelUrl("https://www.youtube.com/@Creator").cacheKey, "handle:@creator");
+  assert.equal(parseYouTubeVideoUrl("https://www.youtube.com/watch?v=abcdefghijk").videoId, "abcdefghijk");
+  assert.equal(parseYouTubeVideoUrl("https://youtu.be/abcdefghijk").canonicalUrl, "https://www.youtube.com/watch?v=abcdefghijk");
+  assert.equal(parseYouTubeVideoUrl("https://www.youtube.com/shorts/abcdefghijk").videoId, "abcdefghijk");
+  assert.equal(parseYouTubeVideoUrl("https://www.youtube.com/live/abcdefghijk").videoId, "abcdefghijk");
+  assert.throws(() => parseYouTubeVideoUrl("https://example.com/watch?v=abcdefghijk"), /Invalid YouTube video URL/);
+  const metadataClient = createYouTubeClient({ minRequestIntervalMs: 0, throttle: new RequestThrottle(0), fetchImpl: async () => response(`<meta property="og:title" content="Night Shift at Paulie's Short"><meta itemprop="datePublished" content="2026-07-13"><script>{"channelId":"${CHANNEL_ID}","ownerChannelName":"Creator Channel","publishDate":"2026-07-13"}</script>`) });
+  const metadata = await metadataClient.getVideoMetadata("https://youtu.be/abcdefghijk");
+  assert.equal(metadata.channelId, CHANNEL_ID);
+  assert.equal(metadata.publishedDate, "2026-07-13");
+  assert.equal(metadata.canonicalUrl, "https://www.youtube.com/watch?v=abcdefghijk");
   assert.throws(() => parseYouTubeChannelUrl("https://example.com/@Creator"), (error) => error.code === "invalid_url");
   assert.equal(extractChannelIdFromHtml(`{"channelId":"${CHANNEL_ID}"}`), CHANNEL_ID);
   assert.equal(extractChannelIdFromHtml(`<link rel="alternate" href="https://www.youtube.com/feeds/videos.xml?channel_id=${CHANNEL_ID}">`), CHANNEL_ID);
