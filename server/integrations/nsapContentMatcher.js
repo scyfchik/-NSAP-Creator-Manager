@@ -9,6 +9,19 @@ const STRONG_HASHTAGS = [
   "#nightshiftatpauls",
 ];
 
+const WEAK_ALIASES = [
+  "fnaf",
+  "five nights at freddy's",
+  "five nights at freddys",
+  "five nights",
+  "chuck e cheese",
+  "chuckecheese",
+  "chuck e cheeses",
+  "chuckecheeses",
+];
+
+const WEAK_SIGNAL_SCORE = 1;
+
 function matchNsapContent({ title = "", description = "" } = {}) {
   const titleMatch = matchStrongText(title, "title");
   if (titleMatch) return titleMatch;
@@ -23,6 +36,16 @@ function matchNsapContent({ title = "", description = "" } = {}) {
   }
 
   const hasNsap = hasTerm(combined, "nsap");
+  const weakSignals = findWeakSignals(`${title} ${description}`);
+  const weakContext = ["nsap", "paulies", "night shift"].find((term) => hasTerm(combined, term));
+  if (weakSignals.length && weakContext) {
+    const weakAlias = weakSignals[0].alias;
+    return matched(
+      `Matched weak signal with NSAP context: "${weakAlias} + ${displayTerm(weakContext)}"`,
+      `${weakAlias} + ${weakContext}`,
+    );
+  }
+
   const nsapSupport = ["roblox", "paulies", "night shift"].find((term) => hasTerm(combined, term));
   if (hasNsap && nsapSupport) {
     return matched(`Matched combined terms: \"NSAP + ${displayTerm(nsapSupport)}\"`, `nsap + ${nsapSupport}`);
@@ -45,6 +68,22 @@ function matchNsapContent({ title = "", description = "" } = {}) {
     reason: "No relevant NSAP video found in recent feed entries",
     matchedKeyword: "",
   };
+}
+
+function findWeakSignals(value) {
+  const normalized = normalizeText(value);
+  const canonical = canonicalText(value);
+
+  return WEAK_ALIASES.filter((alias) => {
+    const normalizedAlias = normalizeText(alias);
+    if (hasTerm(normalized, normalizedAlias)) {
+      return true;
+    }
+
+    const compactAlias = normalizedAlias.replace(/[^a-z0-9]/g, "");
+    const escapedAlias = compactAlias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`#${escapedAlias}(?:$|[^a-z0-9])`).test(canonical);
+  }).map((alias) => ({ alias, score: WEAK_SIGNAL_SCORE }));
 }
 
 function matchStrongText(value, source) {
@@ -97,6 +136,7 @@ function isNsapReviewCandidate(match) {
 
 function displayTerm(term) {
   if (term === "roblox") return "Roblox";
+  if (term === "nsap") return "NSAP";
   if (term === "night shift") return "Night Shift";
   return "Paulies";
 }
@@ -107,4 +147,12 @@ function titleCasePhrase(phrase) {
   return "Night Shift at Pauls";
 }
 
-module.exports = { STRONG_HASHTAGS, STRONG_PHRASES, isNsapReviewCandidate, matchNsapContent, normalizeText };
+module.exports = {
+  STRONG_HASHTAGS,
+  STRONG_PHRASES,
+  WEAK_ALIASES,
+  WEAK_SIGNAL_SCORE,
+  isNsapReviewCandidate,
+  matchNsapContent,
+  normalizeText,
+};

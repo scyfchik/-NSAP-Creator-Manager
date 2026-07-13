@@ -54,6 +54,7 @@ function getClientPermissions(user) {
     canImportExport: canAdmin(user),
     canManageUsers: canAdmin(user),
     canRestoreBackups: canAdmin(user),
+    canDeleteCreators: canAdmin(user),
     role: getRole(user),
     roleLabel: roleLabels[getRole(user)] || roleLabels.anonymous,
   };

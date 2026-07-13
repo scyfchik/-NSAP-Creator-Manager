@@ -169,6 +169,13 @@ function run() {
   assert.match(dbSource, /INSERT INTO creator_nsap_video_reviews \(creator_id,video_url,video_title,video_upload_date,decision,actor\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6\)/, "PostgreSQL review parameter order must match its columns");
   assert.match(dbSource, /action: `creator\.youtube\.nsap\.\$\{review\.decision\}`/, "every review decision must create a distinct audit action");
   assert.match(dbSource, /await insertAudit\([\s\S]*?return getCreator\(creatorId, tx\)/, "review updates must audit and return a fresh database read-back");
+  assert.match(dbSource, /async function deleteCreatorPermanently[\s\S]*?return db\.transaction/, "permanent creator deletion must be transactional");
+  assert.match(dbSource, /DELETE FROM creators WHERE id/, "creator deletion must remove the creator row");
+  assert.match(dbSource, /action: "creator_deleted"/, "creator deletion must preserve an audit event");
+  assert.match(dbSource, /expectedName !== creator\.name/, "creator deletion must require an exact case-sensitive name");
+  const appSource = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+  assert.match(appSource, /app\.delete\("\/api\/admin\/creators\/:id", requireCsrf, requireAdministrator/, "delete endpoint must require an authenticated administrator and CSRF protection");
+  assert.doesNotMatch(appSource, /app\.delete\("\/api\/creators\/:id"/, "ordinary creator routes must not expose deletion");
   console.log("PostgreSQL creator UPSERT contract tests passed");
 }
 

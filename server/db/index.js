@@ -299,6 +299,48 @@ async function getCreatorNsapReviews(creatorId, tx = db) {
   return tx.all(`SELECT * FROM creator_nsap_video_reviews WHERE creator_id=${marker(1)} ORDER BY updated_at DESC, id DESC`, [creatorId]);
 }
 
+async function getAdminCreators(tx = db) {
+  const creators = await getCreators({}, tx);
+  const reviewRows = await tx.all("SELECT creator_id, COUNT(*) AS count FROM creator_nsap_video_reviews GROUP BY creator_id");
+  const reviewCounts = new Map(reviewRows.map((row) => [row.creator_id, Number(row.count)]));
+  return creators.map((creator) => ({
+    id: creator.id,
+    name: creator.name,
+    platforms: [creator.platform, creator.youtubeUrl && "YouTube", creator.tiktokUrl && "TikTok", creator.twitchUrl && "Twitch", creator.twitterUrl && "X"].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index),
+    createdAt: creator.createdAt || "",
+    confirmedContentCount: creator.latestNsapVideoUrl ? 1 : 0,
+    reviewCandidateCount: reviewCounts.get(creator.id) || 0,
+    followUpCount: creator.followUpDate || creator.followUp === "Yes" ? 1 : 0,
+    status: creator.status || "Inactive",
+  }));
+}
+
+async function deleteCreatorPermanently({ creatorId, expectedName, user, ip }) {
+  return db.transaction(async (tx) => {
+    const creator = await getCreator(creatorId, tx);
+    if (!creator || creator.deleted) return null;
+    if (expectedName !== creator.name) {
+      const error = new Error("Creator name confirmation does not match");
+      error.code = "CREATOR_NAME_MISMATCH";
+      throw error;
+    }
+    const timelineCount = Number((await tx.get(`SELECT COUNT(*) AS count FROM timeline_entries WHERE creator_id = ${marker(1)}`, [creatorId]))?.count || 0);
+    const reviewCount = Number((await tx.get(`SELECT COUNT(*) AS count FROM creator_nsap_video_reviews WHERE creator_id = ${marker(1)}`, [creatorId]))?.count || 0);
+    const snapshot = {
+      creatorId,
+      displayName: creator.name,
+      platformUrls: [creator.url, creator.youtubeUrl, creator.tiktokUrl, creator.twitchUrl, creator.twitterUrl].filter(Boolean),
+      deletedByUserId: user?.discord_id || null,
+      deletedByDisplayName: user?.username || "Anonymous",
+      deletedAt: new Date().toISOString(),
+      deletedCounts: { creators: 1, timelineEntries: timelineCount, reviewRecords: reviewCount },
+    };
+    await tx.run(`DELETE FROM creators WHERE id = ${marker(1)}`, [creatorId]);
+    await insertAudit({ user, action: "creator_deleted", creatorId, field: "creator", oldValue: snapshot, newValue: null, ip }, tx);
+    return snapshot;
+  });
+}
+
 async function updateCreatorNsapDecision({creatorId,review,automaticResult,expectedCandidate,user,ip}) {
   return db.transaction(async (tx) => {
     const creator = await getCreator(creatorId, tx);
@@ -384,4 +426,4 @@ function appendTimeline(c,e){c.timeline=Array.isArray(c.timeline)?c.timeline:[];
 function stringify(v){return v==null?null:typeof v==="string"?v:JSON.stringify(v);}
 function assertUnique(all,c){const norm=v=>String(v||"").trim().toLowerCase();if(all.some(x=>norm(x.name)===norm(c.name)||(c.channel&&norm(x.channel)===norm(c.channel))||(c.discordId&&x.discordId===c.discordId))){const e=new Error("A creator with this name, channel, or Discord ID already exists.");e.status=409;throw e;}}
 
-module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreatorNsapReviews,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorNsapDecision,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{applyCreatorNsapReview,buildPostgresCreatorUpsert,isPlainObject,isSameNsapCandidate,mapCreatorRow,serializeCreatorPayload}};
+module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteCreatorPermanently,deleteSession,getAdminCreators,getAuditLog,getBackups,getCreator,getCreatorNsapReviews,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorNsapDecision,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{applyCreatorNsapReview,buildPostgresCreatorUpsert,isPlainObject,isSameNsapCandidate,mapCreatorRow,serializeCreatorPayload}};

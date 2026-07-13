@@ -11,6 +11,8 @@ const { clearSession, getRequestUser, handleDiscordCallback, redirectToDiscord }
 const {
   addTimelineEntry,
   createCreator,
+  deleteCreatorPermanently,
+  getAdminCreators,
   getAuditLog,
   getBackups,
   getCreators,
@@ -21,7 +23,6 @@ const {
   markDmSent,
   replaceCreators,
   restoreBackup,
-  softDeleteCreator,
   updateCreatorField,
   updateCreatorProfile,
   updateUserRole,
@@ -198,11 +199,21 @@ async function createApp() {
     res.json({ job });
   });
 
-  app.delete("/api/creators/:id", requireCsrf, requireCreatorEditor, asyncHandler(async (req, res) => {
-    if (req.body?.confirmation !== req.params.id) return res.status(400).json({ error: "Creator ID confirmation does not match" });
-    const creator = await softDeleteCreator({ creatorId: req.params.id, user: req.user, ip: req.ip });
-    if (!creator) return res.status(404).json({ error: "Creator not found" });
-    res.json({ creator });
+  app.get("/api/admin/creators", requireAdministrator, asyncHandler(async (req, res) => {
+    res.json({ creators: await getAdminCreators() });
+  }));
+
+  app.delete("/api/admin/creators/:id", requireCsrf, requireAdministrator, asyncHandler(async (req, res) => {
+    const expectedName = typeof req.body?.confirmation === "string" ? req.body.confirmation : "";
+    if (!expectedName) return res.status(400).json({ error: "Creator name confirmation is required" });
+    try {
+      const deleted = await deleteCreatorPermanently({ creatorId: req.params.id, expectedName, user: req.user, ip: req.ip });
+      if (!deleted) return res.status(404).json({ error: "Creator not found" });
+      res.json({ deleted });
+    } catch (error) {
+      if (error.code === "CREATOR_NAME_MISMATCH") return res.status(409).json({ error: error.message });
+      throw error;
+    }
   }));
 
   app.get("/api/export", requireAdministrator, asyncHandler(async (req, res) => {

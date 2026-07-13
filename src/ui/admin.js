@@ -2,10 +2,34 @@ import { escapeHtml, safeUrl } from "../utils/format.js";
 import { t } from "../i18n/index.js";
 
 const roles = ["viewer", "manager", "administrator", "owner"];
-export function renderAdmin({ users, audit, backups, permissions }) {
+export function renderAdmin({ users, audit, backups, creators, permissions }) {
   renderUsers(users, permissions);
   renderBackups(backups, permissions);
   renderAudit(audit);
+  renderCreators(creators || [], permissions);
+}
+
+function renderCreators(creators, permissions) {
+  const container = document.getElementById("adminCreatorsList");
+  if (!container) return;
+  if (!permissions.canDeleteCreators) {
+    container.innerHTML = `<p class="empty-state">${t("admin.required")}</p>`;
+    return;
+  }
+  if (!creators.length) {
+    container.innerHTML = `<p class="empty-state">${t("admin.noCreators")}</p>`;
+    return;
+  }
+  container.innerHTML = creators.map((creator) => `
+    <article class="admin-creator-row">
+      <div><strong>${escapeHtml(creator.name)}</strong><span>${escapeHtml(creator.id)}</span></div>
+      <span>${escapeHtml(creator.platforms.join(", ") || "-")}</span>
+      <span>${escapeHtml(creator.createdAt || "-")}</span>
+      <span>${creator.confirmedContentCount} / ${creator.reviewCandidateCount} / ${creator.followUpCount}</span>
+      <span>${escapeHtml(creator.status)}</span>
+      <button class="button button-danger-secondary" data-admin-delete-creator="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.delete"))}</button>
+    </article>
+  `).join("");
 }
 
 function renderUsers(users, permissions) {

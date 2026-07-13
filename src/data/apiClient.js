@@ -84,7 +84,7 @@ export const api = {
     });
   },
   deleteCreator(creatorId, confirmation) {
-    return request(`/api/creators/${encodeURIComponent(creatorId)}`, {
+    return request(`/api/admin/creators/${encodeURIComponent(creatorId)}`, {
       method: "DELETE",
       body: JSON.stringify({ confirmation }),
     });
@@ -139,6 +139,9 @@ export const api = {
   },
   getUsers() {
     return request("/api/users");
+  },
+  getAdminCreators() {
+    return request("/api/admin/creators");
   },
   updateUserRole(discordId, role) {
     return request(`/api/users/${encodeURIComponent(discordId)}/role`, {

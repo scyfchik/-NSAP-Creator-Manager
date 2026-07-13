@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { matchNsapContent } = require("./nsapContentMatcher");
+const { WEAK_ALIASES, WEAK_SIGNAL_SCORE, matchNsapContent } = require("./nsapContentMatcher");
 const { validateNsapDecision } = require("../validation");
 const { RequestThrottle, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed, selectYouTubeFeed } = require("./youtube");
 const { TaskQueue, createYouTubeSyncManager, reconcileNsapResult } = require("./youtubeSync");
@@ -45,6 +45,29 @@ async function run() {
   assert.equal(matchNsapContent({ title: "Minecraft survival episode 4" }).status, "no_match");
   assert.equal(matchNsapContent({ title: "Roblox obby challenge" }).classification, "unrelated", "Roblox alone must not become a candidate");
   assert.equal(matchNsapContent({ title: "NSAP Roblox update" }).status, "matched");
+  assert.equal(WEAK_SIGNAL_SCORE, 1, "weak aliases must contribute exactly one weak signal point");
+  assert.deepEqual(WEAK_ALIASES, [
+    "fnaf",
+    "five nights at freddy's",
+    "five nights at freddys",
+    "five nights",
+    "chuck e cheese",
+    "chuckecheese",
+    "chuck e cheeses",
+    "chuckecheeses",
+  ]);
+  for (const alias of WEAK_ALIASES) {
+    assert.notEqual(matchNsapContent({ title: alias }).status, "matched", `${alias} alone must never match`);
+  }
+  ["#fnaf", "#fiveNightsAtFreddys", "#chuckecheese", "#chuckecheeses"]
+    .forEach((hashtag) => assert.notEqual(matchNsapContent({ description: hashtag }).status, "matched", `${hashtag} alone must never match`));
+  assert.equal(matchNsapContent({ title: "FNAF Night Shift short" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "FNAF Paulies short" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "FNAF NSAP short" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "#fiveNightsAtFreddys", description: "Night Shift gameplay" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "#chuckecheeses", description: "Paulies creator short" }).status, "matched");
+  assert.equal(matchNsapContent({ title: "FNAF ChuckECheese compilation" }).status, "no_match", "multiple weak aliases still need NSAP context");
+  assert.equal(matchNsapContent({ title: "FNAF Roblox obby" }).status, "no_match", "Roblox is not sufficient context for a weak alias");
 
   const upload = parseYouTubeFeed(FEED);
   assert.equal(upload.latestChannelVideoTitle, "Minecraft survival episode 4");

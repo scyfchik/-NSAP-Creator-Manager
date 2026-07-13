@@ -13,6 +13,7 @@ import {
   reminderTemplates,
   renderCreatorDetails,
   renderDeleteConfirmModal,
+  renderDeleteWarningModal,
   renderEditProfileModal,
 } from "./ui/modal.js";
 import { renderSettings } from "./ui/settings.js";
@@ -90,6 +91,7 @@ let adminData = {
   users: [],
   audit: [],
   backups: [],
+  creators: [],
 };
 
 applyStaticTranslations();
@@ -216,6 +218,7 @@ function wireEvents() {
   document.getElementById("refreshAdmin").addEventListener("click", refreshAdmin);
   document.getElementById("usersList").addEventListener("change", handleUserRoleChange);
   document.getElementById("backupsList").addEventListener("click", handleBackupRestore);
+  document.getElementById("adminCreatorsList").addEventListener("click", handleAdminCreatorAction);
   document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
   document.getElementById("mobileMenuButton").addEventListener("click", toggleMobileNavigation);
   document.getElementById("sidebarResizer").addEventListener("pointerdown", handleSidebarResize);
@@ -373,6 +376,11 @@ function handleOpenCreatorClick(event) {
 
 function handleModalEdit(event) {
   const target = event.target;
+  if (target.id === "deleteConfirmation") {
+    const button = document.querySelector("[data-confirm-delete]");
+    if (button) button.disabled = target.value !== target.dataset.deleteName;
+    return;
+  }
   if (target.closest("#addCreatorForm")) {
     setModalDirty(serializeForm("addCreatorForm") !== modalInitialSnapshot);
     return;
@@ -433,21 +441,16 @@ function handleModalClick(event) {
     return;
   }
 
-  const deleteButton = event.target.closest("[data-delete-creator]");
-  if (deleteButton) {
-    if (!confirmLeaveModal()) {
-      return;
-    }
-    const creator = getCreatorById(deleteButton.dataset.deleteCreator);
-    if (creator) {
-      renderDeleteConfirmModal(creator);
-    }
-    return;
-  }
-
   const confirmDelete = event.target.closest("[data-confirm-delete]");
   if (confirmDelete) {
     deleteCreator(confirmDelete.dataset.confirmDelete);
+    return;
+  }
+
+  const continueDelete = event.target.closest("[data-continue-delete]");
+  if (continueDelete) {
+    const creator = getCreatorById(continueDelete.dataset.continueDelete);
+    if (creator) renderDeleteConfirmModal(creator);
     return;
   }
 
@@ -697,18 +700,34 @@ async function deleteCreator(creatorId) {
     return;
   }
 
+  const button = document.querySelector(`[data-confirm-delete="${CSS.escape(creatorId)}"]`);
+  if (button?.disabled) return;
   try {
+    setSaveLoading(button, true);
     const confirmation = document.getElementById("deleteConfirmation")?.value || "";
     await api.deleteCreator(creatorId, confirmation);
     creators = creators.filter((creator) => creator.id !== creatorId);
     activeCreatorId = null;
     resetModalDirty();
     document.getElementById("creatorDialog").close();
+    await loadAdminData();
     renderAll();
     showToast(t("message.creatorDeleted"));
   } catch (error) {
     showToast(error.message, "error");
+  } finally {
+    setSaveLoading(button, false);
   }
+}
+
+function handleAdminCreatorAction(event) {
+  const button = event.target.closest("[data-admin-delete-creator]");
+  if (!button || !session.permissions.canDeleteCreators) return;
+  const creator = getCreatorById(button.dataset.adminDeleteCreator);
+  if (!creator) return;
+  activeCreatorId = creator.id;
+  renderDeleteWarningModal(creator);
+  document.getElementById("creatorDialog").showModal();
 }
 
 async function addTimelineEntry(creatorId, button) {
@@ -1107,20 +1126,22 @@ async function logout() {
 
 async function loadAdminData() {
   if (!session.permissions.canManageUsers) {
-    adminData = { users: [], audit: [], backups: [] };
+    adminData = { users: [], audit: [], backups: [], creators: [] };
     return;
   }
 
-  const [users, audit, backups] = await Promise.all([
+  const [users, audit, backups, adminCreators] = await Promise.all([
     api.getUsers(),
     api.getAudit(),
     api.getBackups(),
+    api.getAdminCreators(),
   ]);
 
   adminData = {
     users: users.users,
     audit: audit.audit,
     backups: backups.backups,
+    creators: adminCreators.creators,
   };
 }
 

@@ -138,7 +138,6 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
         ${permissions.canEdit ? `<button class="button button-secondary" data-edit-profile="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.edit"))}</button>` : ""}
         ${permissions.canEdit && canYouTubeSync ? `<button class="button button-secondary" data-sync-youtube="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.syncYoutube"))}</button>` : ""}
         ${latestNsapVideoUrl ? `<a class="button button-secondary" href="${escapeHtml(latestNsapVideoUrl)}" target="_blank" rel="noreferrer">${escapeHtml(t("profile.openNsapVideo"))}</a>` : ""}
-        ${permissions.canDeleteCreators ? `<button class="button button-danger" data-delete-creator="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.delete"))}</button>` : ""}
       </div>
     </div>
 
@@ -258,19 +257,34 @@ export function renderEditProfileModal(creator) {
   `;
 }
 
+export function renderDeleteWarningModal(creator) {
+  document.getElementById("modalName").textContent = t("profile.deleteCreator", { name: creator.name });
+  document.getElementById("modalBody").innerHTML = `
+    <section class="modal-section danger-confirmation">
+      <h4>${escapeHtml(t("admin.deletePermanent"))}</h4>
+      <p class="settings-copy">${escapeHtml(t("admin.deleteWarning"))}</p>
+      <ul><li>${escapeHtml(t("admin.deleteOwnedData"))}</li><li>${escapeHtml(t("admin.deleteAuditPreserved"))}</li></ul>
+      <p><strong>${escapeHtml(t("admin.irreversible"))}</strong></p>
+      <div class="button-row modal-actions-row">
+        <button class="button button-secondary" data-cancel-profile-edit="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("common.cancel"))}</button>
+        <button class="button button-danger" data-continue-delete="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("admin.continueDelete"))}</button>
+      </div>
+    </section>`;
+}
+
 export function renderDeleteConfirmModal(creator) {
   document.getElementById("modalName").textContent = t("profile.deleteCreator", { name: creator.name });
   document.getElementById("modalBody").innerHTML = `
-    <section class="modal-section">
+    <section class="modal-section danger-confirmation">
       <h4>${escapeHtml(t("profile.typeDelete"))}</h4>
-      <p class="settings-copy">${escapeHtml(t("profile.deleteExplanation"))}</p>
+      <p class="settings-copy">${escapeHtml(t("admin.typeNameToConfirm", { name: creator.name }))}</p>
       <label class="field">
         <span>${escapeHtml(t("profile.confirmation"))}</span>
-        <input id="deleteConfirmation" type="text" autocomplete="off" />
+        <input id="deleteConfirmation" data-delete-name="${escapeHtml(creator.name)}" type="text" autocomplete="off" />
       </label>
       <div class="button-row modal-actions-row">
         <button class="button button-secondary" data-cancel-profile-edit="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("common.cancel"))}</button>
-        <button class="button button-danger" data-confirm-delete="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("profile.delete"))}</button>
+        <button class="button button-danger" data-confirm-delete="${escapeHtml(creator.id)}" type="button" disabled>${escapeHtml(t("profile.delete"))}</button>
       </div>
     </section>
   `;
