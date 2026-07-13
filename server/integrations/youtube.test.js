@@ -9,6 +9,24 @@ const { DECISION: NSAP_REVIEW_DECISION } = require("../../shared/nsapReviewContr
 
 const CHANNEL_ID = "UC1234567890123456789012";
 const FEED = `<?xml version="1.0"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/"><entry><yt:videoId>newest</yt:videoId><title>Minecraft survival episode 4</title><published>2026-07-12T10:00:00+00:00</published><link rel="alternate" href="https://www.youtube.com/watch?v=newest"/></entry><entry><yt:videoId>older</yt:videoId><title>Night Shift at Paulie's is TERRIFYING</title><published>2026-07-01T10:00:00+00:00</published><media:group><media:description>Roblox gameplay</media:description></media:group><link rel="alternate" href="https://www.youtube.com/watch?v=older"/></entry></feed>`;
+const REVIEW_TITLES = [
+  "Night Shift at Paulie's review",
+  "NSAP channel update",
+  "Paulies creator vlog",
+  "Minecraft survival episode 4",
+  "Anime edit compilation",
+  "Roblox obby challenge",
+  "Random short one",
+  "Fortnite highlights",
+  "Cooking tutorial",
+  "Reaction video",
+  "Speedrun attempt",
+  "Music edit",
+  "Daily vlog",
+  "Random short two",
+  "Unrelated gameplay",
+];
+const REVIEW_FEED = makeFeed(REVIEW_TITLES);
 
 async function run() {
   assert.equal(parseYouTubeChannelUrl(`https://youtube.com/channel/${CHANNEL_ID}`).channelId, CHANNEL_ID);
@@ -22,8 +40,10 @@ async function run() {
   assert.equal(matchNsapContent({ title: "Night Shift at Paul's gameplay" }).status, "matched");
   assert.equal(matchNsapContent({ description: "#NightShiftAtPaulies" }).status, "matched");
   assert.equal(matchNsapContent({ title: "Paulies Roblox gameplay" }).status, "matched");
-  assert.equal(matchNsapContent({ title: "NSAP update" }).status, "no_match");
+  assert.equal(matchNsapContent({ title: "NSAP update" }).status, "manual_review_required");
+  assert.equal(matchNsapContent({ title: "Paulies creator vlog" }).classification, "ambiguous");
   assert.equal(matchNsapContent({ title: "Minecraft survival episode 4" }).status, "no_match");
+  assert.equal(matchNsapContent({ title: "Roblox obby challenge" }).classification, "unrelated", "Roblox alone must not become a candidate");
   assert.equal(matchNsapContent({ title: "NSAP Roblox update" }).status, "matched");
 
   const upload = parseYouTubeFeed(FEED);
@@ -112,8 +132,10 @@ async function run() {
 
   await testProgress();
   await testExactReviewFlow();
+  await testFilteredSequentialReview();
   assertFrontendUsesNsapDate();
   assertFrontendReviewContract();
+  assertReviewLocalization();
   console.log("YouTube sync tests passed");
 }
 
@@ -126,6 +148,20 @@ function assertFrontendReviewContract() {
   });
   const appSource = fs.readFileSync(path.join(root, "src/app.js"), "utf8");
   assert.match(appSource, /api\.undoNsapReview/, "Review Undo must call the server-side clear action");
+}
+
+function assertReviewLocalization() {
+  const root = path.resolve(__dirname, "../..");
+  const en = fs.readFileSync(path.join(root, "src/i18n/en.js"), "utf8");
+  const ru = fs.readFileSync(path.join(root, "src/i18n/ru.js"), "utf8");
+  assert.match(en, /Potential NSAP video/);
+  assert.match(en, /Candidate \{current\} of \{total\}/);
+  assert.match(en, /No more potential NSAP videos require review/);
+  assert.match(en, /Show Next Candidate/);
+  assert.match(ru, /Потенциальное видео по NSAP/);
+  assert.match(ru, /Кандидат \{current\} из \{total\}/);
+  assert.match(ru, /Больше нет потенциальных видео по NSAP для проверки/);
+  assert.match(ru, /Показать следующего кандидата/);
 }
 
 function assertFrontendUsesNsapDate() {
@@ -207,7 +243,61 @@ async function testExactReviewFlow() {
   assert.equal(updateArgs.automaticResult.nsapMatchStatus, "no_match");
   assert.equal(updateArgs.automaticResult.latestNsapVideoUrl, "");
   assert.equal(result.creator.nsapMatchStatus, "no_match");
-  assert.equal(result.review.candidate.title, "Minecraft survival episode 4");
+  assert.equal(result.review.status, "exhausted");
+  assert.equal(result.review.candidate, null, "an unrelated upload must not follow a rejected candidate");
+}
+
+async function testFilteredSequentialReview() {
+  const creator = { id: "filtered", name: "Filtered Creator", platform: "YouTube", youtubeUrl: `https://youtube.com/channel/${CHANNEL_ID}` };
+  const persistedReviews = [];
+  let lastExpectedCandidate = null;
+  const dbApi = {
+    getCreator: async () => creator,
+    getCreatorNsapReviews: async () => persistedReviews,
+    getYouTubeChannelMapping: async () => null,
+    setYouTubeChannelMapping: async () => {},
+    updateCreatorYouTubeSync: async ({ result }) => Object.assign(creator, result),
+    updateCreatorNsapDecision: async (args) => {
+      lastExpectedCandidate = args.expectedCandidate;
+      if (args.review.decision === NSAP_REVIEW_DECISION.REJECT) {
+        persistedReviews.push({ decision: NSAP_REVIEW_DECISION.REJECT, video_url: args.review.videoUrl });
+      }
+      return Object.assign(creator, args.automaticResult || {});
+    },
+  };
+  const manager = createYouTubeSyncManager({ dbApi, minRequestIntervalMs: 0, fetchImpl: async () => response(REVIEW_FEED) });
+  let result = await manager.syncCreator(creator.id, { username: "Manager" }, "127.0.0.1");
+  assert.equal(result.review.candidate.index, 1);
+  assert.equal(result.review.candidate.total, 3, "15 uploads with three relevant matches must show Candidate 1 of 3");
+
+  const reviewedTitles = [];
+  for (let index = 0; index < 3; index += 1) {
+    const candidate = result.review.candidate;
+    reviewedTitles.push(candidate.title);
+    result = await manager.reviewCreator(creator.id, {
+      decision: NSAP_REVIEW_DECISION.REJECT,
+      videoTitle: candidate.title,
+      videoUrl: candidate.url,
+      videoUploadDate: candidate.uploadDate,
+    }, { username: "Manager" }, "127.0.0.1");
+    assert.equal(lastExpectedCandidate.url, candidate.url, "reject must apply to the exact current candidate");
+  }
+  assert.deepEqual(reviewedTitles, REVIEW_TITLES.slice(0, 3));
+  assert.equal(result.review.status, "exhausted");
+  assert.equal(result.review.candidate, null);
+  assert.equal(REVIEW_TITLES.slice(3).some((title) => reviewedTitles.includes(title)), false, "unrelated uploads must never enter review");
+
+  const resynced = await manager.syncCreator(creator.id, { username: "Manager" }, "127.0.0.1");
+  assert.equal(resynced.review.candidate, null, "rejected candidate URLs must stay excluded after sync");
+  assert.equal(resynced.review.status, "exhausted");
+}
+
+function makeFeed(titles) {
+  const entries = titles.map((title, index) => {
+    const day = String(28 - index).padStart(2, "0");
+    return `<entry><yt:videoId>review-${index}</yt:videoId><title>${title}</title><published>2026-06-${day}T10:00:00+00:00</published><link rel="alternate" href="https://www.youtube.com/watch?v=review-${index}"/></entry>`;
+  }).join("");
+  return `<?xml version="1.0"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015">${entries}</feed>`;
 }
 
 function response(body, status = 200) {

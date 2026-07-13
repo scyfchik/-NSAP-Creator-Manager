@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 const db = require("../db");
 const { createYouTubeClient, RequestThrottle, selectYouTubeFeed, YouTubeSyncError } = require("./youtube");
-const { matchNsapContent } = require("./nsapContentMatcher");
+const { isNsapReviewCandidate, matchNsapContent } = require("./nsapContentMatcher");
 const { DECISION: NSAP_REVIEW_DECISION } = require("../../shared/nsapReviewContract");
 
 class TaskQueue {
@@ -144,7 +144,10 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
 
 function createReviewState(sourceEntries = [], rejectedVideoUrls = []) {
   const rejectedUrls = new Set(rejectedVideoUrls || []);
-  const entries = sourceEntries.map(normalizeReviewEntry).filter((entry) => entry.url && entry.uploadDate);
+  const potentialEntries = sourceEntries
+    .map(normalizeReviewEntry)
+    .filter((entry) => entry.url && entry.uploadDate && isNsapReviewCandidate(entry.match));
+  const entries = potentialEntries.filter((entry) => !rejectedUrls.has(entry.url));
   const preferred = entries.find((entry) => !rejectedUrls.has(entry.url) && entry.match.matched);
   const ordered = preferred ? [preferred, ...entries.filter((entry) => entry.url !== preferred.url)] : entries;
   const state = {
@@ -153,7 +156,7 @@ function createReviewState(sourceEntries = [], rejectedVideoUrls = []) {
     cursor: 0,
     rejectedUrls,
     skippedUrls: new Set(),
-    checkedUrls: new Set(ordered.filter((entry) => rejectedUrls.has(entry.url)).map((entry) => entry.url)),
+    checkedUrls: new Set(potentialEntries.filter((entry) => rejectedUrls.has(entry.url)).map((entry) => entry.url)),
     status: "ready",
   };
   moveToAvailableCandidate(state);

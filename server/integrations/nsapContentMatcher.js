@@ -28,9 +28,20 @@ function matchNsapContent({ title = "", description = "" } = {}) {
     return matched(`Matched combined terms: \"NSAP + ${displayTerm(nsapSupport)}\"`, `nsap + ${nsapSupport}`);
   }
 
+  if (hasNsap) {
+    return ambiguous("Potential NSAP term requires manual review", "nsap");
+  }
+  if (hasPaulies) {
+    return ambiguous("Potential Paulies reference requires manual review", "paulies");
+  }
+  if (hasRoblox && hasTerm(combined, "night shift")) {
+    return ambiguous("Potential Night Shift + Roblox reference requires manual review", "night shift + roblox");
+  }
+
   return {
     matched: false,
     status: "no_match",
+    classification: "unrelated",
     reason: "No relevant NSAP video found in recent feed entries",
     matchedKeyword: "",
   };
@@ -73,7 +84,15 @@ function hasTerm(text, term) {
 }
 
 function matched(reason, matchedKeyword) {
-  return { matched: true, status: "matched", reason, matchedKeyword };
+  return { matched: true, status: "matched", classification: "matched", reason, matchedKeyword };
+}
+
+function ambiguous(reason, matchedKeyword) {
+  return { matched: false, status: "manual_review_required", classification: "ambiguous", reason, matchedKeyword };
+}
+
+function isNsapReviewCandidate(match) {
+  return ["matched", "ambiguous"].includes(match?.classification);
 }
 
 function displayTerm(term) {
@@ -88,4 +107,4 @@ function titleCasePhrase(phrase) {
   return "Night Shift at Pauls";
 }
 
-module.exports = { STRONG_HASHTAGS, STRONG_PHRASES, matchNsapContent, normalizeText };
+module.exports = { STRONG_HASHTAGS, STRONG_PHRASES, isNsapReviewCandidate, matchNsapContent, normalizeText };

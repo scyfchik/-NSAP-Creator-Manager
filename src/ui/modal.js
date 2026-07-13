@@ -466,6 +466,9 @@ function localizeMatchReason(reason) {
   const value = String(reason || "");
   if (!value) return t("profile.notReviewed");
   if (value === "No relevant NSAP video found in recent feed entries") return t("match.noRelevantVideo");
+  if (value === "Potential NSAP term requires manual review") return t("match.ambiguousNsap");
+  if (value === "Potential Paulies reference requires manual review") return t("match.ambiguousPaulies");
+  if (value === "Potential Night Shift + Roblox reference requires manual review") return t("match.ambiguousNightShiftRoblox");
   let match = value.match(/^Matched (title|description) (hashtag|phrase): \"(.+)\"$/);
   if (match) return t(`match.${match[1]}.${match[2]}`, { value: match[3] });
   match = value.match(/^Matched combined terms: \"(.+)\"$/);
