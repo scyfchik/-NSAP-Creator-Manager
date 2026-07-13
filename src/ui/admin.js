@@ -56,7 +56,7 @@ function renderBackups(backups, permissions) {
         <strong>${escapeHtml(backup.reason)}</strong>
         <span>${escapeHtml(backup.type || t("admin.manual"))} / ${escapeHtml(backup.created_at)} ${escapeHtml(t("admin.by"))} ${escapeHtml(backup.created_by_username || t("common.system"))}</span>
       </div>
-      <button class="button button-secondary" data-restore-backup="${backup.id}" type="button">${t("admin.restore")}</button>
+      <button class="button button-danger-secondary" data-restore-backup="${backup.id}" type="button">${t("admin.restore")}</button>
     </article>
   `).join("");
 }

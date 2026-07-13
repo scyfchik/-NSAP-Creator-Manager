@@ -17,7 +17,7 @@ import {
 } from "./ui/modal.js";
 import { renderSettings } from "./ui/settings.js";
 import { showToast } from "./ui/toast.js";
-import { applyStaticTranslations, setLanguage, t } from "./i18n/index.js";
+import { applyStaticTranslations, getLanguage, setLanguage, t } from "./i18n/index.js";
 import { NSAP_REVIEW_DECISION } from "./constants/nsapReview.js";
 
 const unsavedMessage = () => t("common.unsavedPrompt");
@@ -42,7 +42,7 @@ const defaultState = {
 };
 
 const defaultSettings = {
-  accentColor: "#3dd6d0",
+  accentColor: "#8b5cf6",
   density: "comfortable",
   sidebarCollapsed: false,
   sidebarWidth: 280,
@@ -126,6 +126,9 @@ function wireEvents() {
       state.page = 1;
       persistViewState();
       renderAll();
+      window.scrollTo({ top: 0, behavior: "auto" });
+      document.body.classList.remove("mobile-nav-open");
+      document.getElementById("mobileMenuButton").setAttribute("aria-expanded", "false");
     });
   });
 
@@ -140,6 +143,9 @@ function wireEvents() {
       state.page = 1;
       persistViewState();
       renderAll();
+      window.scrollTo({ top: 0, behavior: "auto" });
+      document.body.classList.remove("mobile-nav-open");
+      document.getElementById("mobileMenuButton").setAttribute("aria-expanded", "false");
     });
   });
 
@@ -203,6 +209,7 @@ function wireEvents() {
   document.getElementById("accentColor").addEventListener("input", updateAccentColor);
   document.getElementById("densityMode").addEventListener("change", updateDensity);
   document.getElementById("languageMode").addEventListener("change", (event) => setLanguage(event.target.value));
+  document.getElementById("quickLanguageToggle").addEventListener("click", () => setLanguage(getLanguage() === "en" ? "ru" : "en"));
   document.getElementById("saveSettings").addEventListener("click", saveSettingsChanges);
   document.getElementById("syncAllYouTube").addEventListener("click", startYouTubeSyncAll);
   document.getElementById("createBackup").addEventListener("click", createBackup);
@@ -210,7 +217,14 @@ function wireEvents() {
   document.getElementById("usersList").addEventListener("change", handleUserRoleChange);
   document.getElementById("backupsList").addEventListener("click", handleBackupRestore);
   document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
+  document.getElementById("mobileMenuButton").addEventListener("click", toggleMobileNavigation);
   document.getElementById("sidebarResizer").addEventListener("pointerdown", handleSidebarResize);
+  document.querySelector(".main-shell").addEventListener("click", (event) => {
+    if (document.body.classList.contains("mobile-nav-open") && !event.target.closest("#mobileMenuButton")) {
+      document.body.classList.remove("mobile-nav-open");
+      document.getElementById("mobileMenuButton").setAttribute("aria-expanded", "false");
+    }
+  });
   document.addEventListener("keydown", handleKeyboardShortcuts);
   window.addEventListener("beforeunload", handleBeforeUnload);
   window.addEventListener("languagechange", () => {
@@ -226,6 +240,7 @@ function wireEvents() {
 
 function renderAll() {
   document.getElementById("searchInput").value = state.search;
+  document.getElementById("quickLanguageToggle").textContent = getLanguage() === "en" ? "RU" : "EN";
   renderAuth();
   renderNavigation();
   renderDashboard(creators);
@@ -255,7 +270,18 @@ function renderNavigation() {
 
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === state.view);
+    if (button.dataset.view === state.view) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
   });
+
+  const followUpCount = creators.filter((creator) => creator.followUp === "Yes").length;
+  const reviewCount = creators.filter((creator) => (
+    (creator.nsapMatchStatus === "no_match" && creator.latestChannelVideoUrl)
+    || !creator.nsapMatchStatus
+    || creator.nsapMatchStatus === "sync_failed"
+  )).length;
+  document.getElementById("followUpNavCount").textContent = String(followUpCount);
+  document.getElementById("reviewNavCount").textContent = String(reviewCount);
 }
 
 function renderCreators() {
@@ -1429,9 +1455,9 @@ function updateSidebarToggle(isCollapsed) {
     return;
   }
 
-  button.textContent = isCollapsed ? ">>" : "<<";
   button.title = isCollapsed ? "Expand sidebar" : "Collapse sidebar";
   button.setAttribute("aria-label", button.title);
+  button.classList.toggle("is-collapsed", isCollapsed);
 }
 
 function toggleSidebar() {
@@ -1439,6 +1465,11 @@ function toggleSidebar() {
   settingsDraft = { ...settings };
   saveSettings(settings);
   applySettings();
+}
+
+function toggleMobileNavigation() {
+  const isOpen = document.body.classList.toggle("mobile-nav-open");
+  document.getElementById("mobileMenuButton").setAttribute("aria-expanded", String(isOpen));
 }
 
 function handleSidebarResize(event) {
@@ -1532,13 +1563,16 @@ function buildColumnTemplate() {
   const defaults = {
     name: 260,
     platform: 130,
+    subscriberCount: 130,
     status: 150,
     priority: 140,
     days: 160,
+    latestNsapVideoTitle: 220,
     collabPosted: 130,
     dmSent: 120,
     quickNote: 220,
     followUpDate: 150,
+    actions: 80,
   };
 
   return Object.keys(defaults)

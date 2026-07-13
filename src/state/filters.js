@@ -58,5 +58,9 @@ function compareCreators(a, b, sort) {
     return direction * ((priorityRank[a.priority] ?? 99) - (priorityRank[b.priority] ?? 99));
   }
 
+  if (sort.field === "subscriberCount") {
+    return direction * ((a.subscriberCount ?? -1) - (b.subscriberCount ?? -1));
+  }
+
   return direction * String(a[sort.field] ?? "").localeCompare(String(b[sort.field] ?? ""));
 }

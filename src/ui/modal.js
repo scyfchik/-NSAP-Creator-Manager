@@ -127,6 +127,7 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
           <div class="profile-badges">
             ${renderBadge(creator.status, creator.status)}
             ${renderBadge(creator.priority, creator.priority)}
+            <span class="badge badge-health badge-tone-${escapeHtml(health.tone)}"><span class="badge-dot"></span>${escapeHtml(health.label)}</span>
           </div>
         </div>
       </div>
@@ -162,7 +163,7 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
       </section>
     </div>
 
-    <section class="modal-section profile-section">
+    <section class="modal-section profile-section notes-card-section">
       <h4>${escapeHtml(t("profile.nsapActivity"))}</h4>
       <div class="modal-grid overview-grid">
         ${renderReadOnly(t("profile.latestNsapVideo"), escapeHtml(formatOptional(creator.latestNsapVideoTitle, t("profile.noMatchedVideo"))))}
@@ -188,7 +189,7 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
 
     <section class="modal-section profile-section">
       <h4>${escapeHtml(t("profile.notes"))}</h4>
-      <div class="profile-notes">${creator.notes ? escapeHtml(creator.notes) : `<span>${escapeHtml(t("profile.noNotes"))}</span>`}</div>
+      <div class="profile-notes">${creator.notes ? `<p>${escapeHtml(creator.notes)}</p>` : `<span>${escapeHtml(t("profile.noNotes"))}</span>`}</div>
     </section>
 
     ${metricItems ? `
@@ -234,7 +235,7 @@ export function renderCreatorDetails(creator, permissions = { canEdit: false }, 
 export function renderEditProfileModal(creator) {
   document.getElementById("modalName").textContent = t("profile.editCreator", { name: creator.name });
   document.getElementById("modalBody").innerHTML = `
-    <section class="modal-section">
+    <section class="modal-section danger-confirmation">
       <h4>${escapeHtml(t("profile.fields"))}</h4>
       <div class="modal-form notes-section" id="editCreatorForm" data-editing-creator="${escapeHtml(creator.id)}">
         ${profileFields.map(([field, labelKey, type, required]) => {
@@ -318,10 +319,11 @@ function renderTimeline(creator) {
 
   return timeline
     .map((item) => `
-      <article class="activity-item">
-        <strong>${escapeHtml(item.type || "custom")}</strong>
+      <article class="activity-item" data-event-type="${escapeHtml(item.type || "custom")}">
+        <span class="activity-marker" aria-hidden="true"></span>
+        <div><strong>${escapeHtml(item.type || "custom")}</strong>
         <span>${escapeHtml(formatActivityDate(item.timestamp))} / ${escapeHtml(item.actorUsername || t("common.system"))} (${escapeHtml(t(`role.${item.actorRole || "system"}`))})</span>
-        <p>${escapeHtml(item.message || "")}</p>
+        <p>${escapeHtml(item.message || "")}</p></div>
       </article>
     `)
     .join("");
@@ -334,10 +336,11 @@ function renderHistory(history = []) {
 
   return history
     .map((item) => `
-      <article class="activity-item">
-        <strong>${escapeHtml(item.type || t("profile.activity"))}</strong>
+      <article class="activity-item" data-event-type="${escapeHtml(item.type || "activity")}">
+        <span class="activity-marker" aria-hidden="true"></span>
+        <div><strong>${escapeHtml(item.type || t("profile.activity"))}</strong>
         <span>${escapeHtml(formatActivityDate(item.date))}</span>
-        <p>${escapeHtml(item.note || "")}</p>
+        <p>${escapeHtml(item.note || "")}</p></div>
       </article>
     `)
     .join("");
@@ -419,31 +422,33 @@ function renderNsapReview(creator, permissions, reviewState) {
   const candidate = reviewState.candidate;
   const hasManualDecision = Boolean(creator.nsapDecisionVideoUrl || creator.nsapDecisionActor || creator.nsapDecisionAt);
   const candidateDetails = candidate
-    ? `<div class="modal-grid overview-grid">
+    ? `<div class="review-candidate-card">
+      <div class="review-candidate-label"><span class="badge ${/potential|ambiguous/i.test(candidate.matchReason || "") ? "badge-tone-watch" : "badge-tone-good"}"><span class="badge-dot"></span>${escapeHtml(/potential|ambiguous/i.test(candidate.matchReason || "") ? t("review.ambiguous") : t("review.matched"))}</span></div>
+      <div class="modal-grid overview-grid">
         ${renderReadOnly(t("review.candidateTitle"), escapeHtml(candidate.title))}
         ${renderReadOnly(t("review.uploadDate"), escapeHtml(formatLocalizedDate(candidate.uploadDate)))}
         ${renderReadOnly(t("review.videoUrl"), `<a href="${escapeHtml(candidate.url)}" target="_blank" rel="noreferrer">${escapeHtml(candidate.url)}</a>`)}
         ${renderReadOnly(t("review.position"), escapeHtml(t("review.positionValue", { current: candidate.index, total: candidate.total })))}
         ${renderReadOnly(t("profile.matchReason"), escapeHtml(localizeMatchReason(candidate.matchReason)))}
-      </div>`
+      </div></div>`
     : `<p class="empty-state compact-empty">${escapeHtml(getEmptyReviewMessage(reviewState.status))}</p>`;
 
   const actions = permissions.canEdit
-    ? `<div class="button-row modal-actions-row">
-        <div>
+    ? `<div class="review-actions">
+        <div class="review-action review-action-confirm">
           <button class="button button-primary" data-nsap-review="${NSAP_REVIEW_DECISION.CONFIRM}" data-creator-id="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.confirm"))}</button>
           <p class="settings-copy">${escapeHtml(t("review.confirmText"))}</p>
         </div>
-        <div>
-          <button class="button button-secondary" data-nsap-review="${NSAP_REVIEW_DECISION.REJECT}" data-creator-id="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.reject"))}</button>
+        <div class="review-action review-action-reject">
+          <button class="button button-danger-secondary" data-nsap-review="${NSAP_REVIEW_DECISION.REJECT}" data-creator-id="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.reject"))}</button>
           <p class="settings-copy">${escapeHtml(t("review.rejectText"))}</p>
         </div>
-        <div>
+        <div class="review-action review-action-next">
           <button class="button button-secondary" data-nsap-next="${escapeHtml(creator.id)}" type="button" ${candidate ? "" : "disabled"}>${escapeHtml(t("review.showNext"))}</button>
           <p class="settings-copy">${escapeHtml(t("review.showNextText"))}</p>
         </div>
-        ${hasManualDecision ? `<div>
-          <button class="button button-secondary" data-nsap-review="${NSAP_REVIEW_DECISION.CLEAR}" data-creator-id="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("review.clear"))}</button>
+        ${hasManualDecision ? `<div class="review-action review-action-clear">
+          <button class="button button-ghost" data-nsap-review="${NSAP_REVIEW_DECISION.CLEAR}" data-creator-id="${escapeHtml(creator.id)}" type="button">${escapeHtml(t("review.clear"))}</button>
           <p class="settings-copy">${escapeHtml(t("review.clearText"))}</p>
         </div>` : ""}
       </div>`

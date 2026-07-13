@@ -1,18 +1,21 @@
 import { renderAvatar, renderBadge, renderUploadHealth } from "../utils/creatorVisuals.js";
 import { isFollowUpDue } from "../utils/calculations.js";
-import { escapeHtml } from "../utils/format.js";
+import { escapeHtml, formatNumber } from "../utils/format.js";
 import { t } from "../i18n/index.js";
 
 const columns = [
   ["name", "table.creator"],
   ["platform", "filter.platform"],
+  ["subscriberCount", "table.audience"],
   ["status", "filter.status"],
   ["priority", "filter.priority"],
   ["days", "table.nsapUploadAge"],
+  ["latestNsapVideoTitle", "table.lastContent"],
   ["collabPosted", "table.collab"],
   ["dmSent", "table.dm"],
   ["quickNote", "table.quickNote"],
   ["followUpDate", "table.followUp"],
+  ["actions", "table.actions"],
 ];
 
 const editableSelects = {
@@ -42,6 +45,9 @@ export function renderCreatorsTable({ rows, total, page, maxPage, pageSize, sort
 }
 
 function renderHeaderCell(field, labelKey, sort) {
+  if (field === "actions") {
+    return `<div class="table-cell header-cell table-actions-head" role="columnheader"><span>${escapeHtml(t(labelKey))}</span></div>`;
+  }
   const active = sort.field === field;
   const direction = active ? sort.direction : "asc";
   const sortIcon = active ? (sort.direction === "desc" ? "&darr;" : "&uarr;") : "";
@@ -68,13 +74,16 @@ function renderRow(creator, permissions, quickNoteDrafts, quickNoteSaveStates) {
         </span>
       </button>
       <div class="table-cell">${renderBadge(creator.platform, creator.platform)}</div>
+      <div class="table-cell audience-cell"><strong>${escapeHtml(Number.isFinite(creator.subscriberCount) ? formatNumber(creator.subscriberCount) : t("common.unknown"))}</strong></div>
       <div class="table-cell">${renderInlineSelect(creator, "status", permissions)}</div>
       <div class="table-cell">${renderInlineSelect(creator, "priority", permissions)}</div>
       <div class="table-cell">${renderUploadHealth(creator)}</div>
+      <div class="table-cell last-content-cell"><span title="${escapeHtml(creator.latestNsapVideoTitle || t("common.unknown"))}">${escapeHtml(creator.latestNsapVideoTitle || t("common.unknown"))}</span></div>
       <div class="table-cell">${renderInlineSelect(creator, "collabPosted", permissions)}</div>
       <div class="table-cell">${renderInlineSelect(creator, "dmSent", permissions)}</div>
       <div class="table-cell">${renderInlineQuickNote(creator, permissions, quickNoteDrafts, quickNoteSaveStates)}</div>
       <div class="table-cell">${renderFollowUpDate(creator)}</div>
+      <div class="table-cell table-actions-cell"><button class="icon-button" data-open-creator="${escapeHtml(creator.id)}" type="button" aria-label="${escapeHtml(t("dashboard.openCreator", { name: creator.name }))}" title="${escapeHtml(t("dashboard.openProfile"))}"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button></div>
     </div>
   `;
 }
@@ -132,13 +141,16 @@ function defaultWidth(field) {
   const widths = {
     name: 260,
     platform: 130,
+    subscriberCount: 130,
     status: 150,
     priority: 140,
     days: 160,
+    latestNsapVideoTitle: 220,
     collabPosted: 130,
     dmSent: 120,
     quickNote: 220,
     followUpDate: 150,
+    actions: 80,
   };
 
   return widths[field] || 140;

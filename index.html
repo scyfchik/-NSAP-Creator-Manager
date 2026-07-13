@@ -16,55 +16,65 @@
           <h1>NSAP</h1>
           <p data-i18n="app.creatorManager">Creator Manager</p>
         </div>
-        <button class="icon-button sidebar-toggle" id="sidebarToggle" type="button" aria-label="Collapse sidebar" title="Collapse sidebar" data-i18n-aria-label="nav.collapse" data-i18n-title="nav.collapse"><<</button>
+        <button class="icon-button sidebar-toggle" id="sidebarToggle" type="button" aria-label="Collapse sidebar" title="Collapse sidebar" data-i18n-aria-label="nav.collapse" data-i18n-title="nav.collapse">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
       </div>
 
       <nav class="nav-list" aria-label="Primary" data-i18n-aria-label="nav.primary">
         <button class="nav-item active" data-view="dashboard" type="button" title="Dashboard">
-          <span class="nav-icon">D</span>
+          <span class="nav-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
           <span data-i18n="nav.dashboard">Dashboard</span>
         </button>
         <button class="nav-item" data-view="creators" type="button" title="Creators">
-          <span class="nav-icon">C</span>
+          <span class="nav-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
           <span data-i18n="nav.creators">Creators</span>
+          <span class="nav-count nav-count-review" id="reviewNavCount" title="Needs review">0</span>
         </button>
         <button class="nav-item" data-filter-shortcut="followUp" type="button" title="Needs Follow-up">
-          <span class="nav-icon">F</span>
+          <span class="nav-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 8h8M8 12h5"/></svg></span>
           <span data-i18n="nav.followUp">Needs Follow-up</span>
+          <span class="nav-count" id="followUpNavCount">0</span>
         </button>
         <button class="nav-item" data-filter-shortcut="collabMissing" type="button" title="Collab Missing">
-          <span class="nav-icon">M</span>
+          <span class="nav-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 8l8 5 8-5"/></svg></span>
           <span data-i18n="nav.collabMissing">Collab Missing</span>
         </button>
         <button class="nav-item" data-view="settings" type="button" title="Settings">
-          <span class="nav-icon">S</span>
+          <span class="nav-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63 1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9 1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15z"/></svg></span>
           <span data-i18n="nav.settings">Settings</span>
         </button>
         <button class="nav-item admin-only" data-view="admin" type="button" title="Admin" hidden>
-          <span class="nav-icon">A</span>
+          <span class="nav-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
           <span data-i18n="nav.admin">Admin</span>
         </button>
       </nav>
+      <div class="sidebar-profile">
+        <div class="auth-chip" id="authSummary">
+          <span id="authUser" data-i18n="auth.anonymous">Anonymous</span>
+          <b id="authRole">viewer</b>
+        </div>
+        <a class="button button-primary" id="loginButton" href="/auth/discord" data-i18n="auth.login">Login with Discord</a>
+        <button class="button button-secondary" id="logoutButton" type="button" hidden data-i18n="auth.logout">Logout</button>
+      </div>
       <span class="sidebar-resizer" id="sidebarResizer" aria-hidden="true"></span>
     </aside>
 
     <main class="main-shell">
       <header class="topbar">
-        <div>
+        <button class="icon-button mobile-menu-button" id="mobileMenuButton" type="button" aria-label="Open navigation" title="Open navigation" aria-expanded="false">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="topbar-title">
           <p class="eyebrow" data-i18n="app.supervisorDashboard">Creator Supervisor Dashboard</p>
           <h2 data-i18n="app.trackerTitle">Night Shift at Paulie's Creator Tracker</h2>
         </div>
         <div class="top-actions">
-          <div class="auth-chip" id="authSummary">
-            <span id="authUser" data-i18n="auth.anonymous">Anonymous</span>
-            <b id="authRole">viewer</b>
-          </div>
-          <a class="button button-primary" id="loginButton" href="/auth/discord" data-i18n="auth.login">Login with Discord</a>
-          <button class="button button-secondary" id="logoutButton" type="button" hidden data-i18n="auth.logout">Logout</button>
           <label class="search-box">
-            <span data-i18n="common.search">Search</span>
+            <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
             <input id="searchInput" type="search" placeholder="Name, channel, platform, status, notes..." data-i18n-placeholder="common.searchPlaceholder" autocomplete="off" />
           </label>
+          <button class="button button-secondary language-toggle" id="quickLanguageToggle" type="button" aria-label="Switch language" title="Switch language" data-i18n-aria-label="common.switchLanguage" data-i18n-title="common.switchLanguage">RU</button>
           <button class="button button-secondary" id="undoEdit" type="button" disabled data-i18n="common.undo">Undo</button>
         </div>
       </header>
@@ -88,28 +98,28 @@
 
         <div class="stats-grid" id="statsGrid"></div>
 
-        <div class="dashboard-grid">
-          <section class="panel platform-panel" aria-labelledby="platformTitle">
+        <div class="dashboard-layout">
+          <div class="dashboard-main-column">
+          <section class="panel activity-chart-panel" aria-labelledby="activityTitle">
             <div class="panel-head">
-              <h4 id="platformTitle" data-i18n="dashboard.platformDistribution">Platform Distribution</h4>
+              <div><h4 id="activityTitle" data-i18n="dashboard.creatorActivity">Creator Activity</h4><p data-i18n="dashboard.activityDescription">Recorded activity over the last 7 days</p></div>
             </div>
-            <div id="platformDistribution"></div>
+            <div id="creatorActivityChart"></div>
           </section>
 
-          <section class="panel attention-panel" aria-labelledby="attentionTitle">
+          <section class="panel recent-creators-panel" aria-labelledby="recentCreatorsTitle">
             <div class="panel-head">
-              <h4 id="attentionTitle" data-i18n="dashboard.needsAttention">Needs Attention</h4>
+              <div><h4 id="recentCreatorsTitle" data-i18n="dashboard.recentCreators">Recent Creators</h4><p data-i18n="dashboard.recentCreatorsDescription">Creators with the latest recorded activity</p></div>
             </div>
-            <div id="attentionList"></div>
+            <div class="dashboard-table-scroll"><div id="recentCreators"></div></div>
           </section>
-        </div>
-
-        <section class="panel notification-panel" aria-labelledby="notificationTitle">
-          <div class="panel-head">
-            <h4 id="notificationTitle" data-i18n="dashboard.notifications">Notification Center</h4>
           </div>
-          <div id="notificationList"></div>
-        </section>
+          <aside class="dashboard-side-column">
+            <section class="panel health-panel" aria-labelledby="healthTitle"><div class="panel-head"><div><h4 id="healthTitle" data-i18n="dashboard.healthDistribution">Health Distribution</h4><p data-i18n="dashboard.healthDescription">Verified NSAP upload freshness</p></div></div><div id="healthDistribution"></div></section>
+            <section class="panel recent-activity-panel" aria-labelledby="recentActivityTitle"><div class="panel-head"><div><h4 id="recentActivityTitle" data-i18n="dashboard.recentActivity">Recent Activity</h4><p data-i18n="dashboard.fromTimeline">From creator timelines</p></div></div><div id="recentActivity"></div></section>
+            <section class="panel top-creators-panel" aria-labelledby="topCreatorsTitle"><div class="panel-head"><div><h4 id="topCreatorsTitle" data-i18n="dashboard.topCreators">Top Creators</h4><p data-i18n="dashboard.byHealth">Ranked by current health</p></div></div><div id="topCreators"></div></section>
+          </aside>
+        </div>
       </section>
 
       <section class="view" id="creatorsView" aria-labelledby="creatorsTitle">
@@ -117,6 +127,7 @@
           <div>
             <p class="eyebrow" data-i18n="creators.management">Creator management</p>
             <h3 id="creatorsTitle" data-i18n="nav.creators">Creators</h3>
+            <p class="page-description" data-i18n="creators.description">Search, review and update creator records.</p>
           </div>
           <div class="button-row">
             <button class="button button-primary" id="addCreator" type="button" hidden data-i18n="creators.add">+ Add Creator</button>
@@ -124,7 +135,7 @@
           </div>
         </div>
 
-        <section class="filter-bar" aria-label="Creator filters" data-i18n-aria-label="creators.filters">
+        <section class="filter-bar filter-panel" aria-label="Creator filters" data-i18n-aria-label="creators.filters">
           <label>
             <span data-i18n="filter.platform">Platform</span>
             <select id="platformFilter"></select>
@@ -189,13 +200,14 @@
           <div>
             <p class="eyebrow" data-i18n="settings.controls">Workspace controls</p>
             <h3 id="settingsTitle" data-i18n="nav.settings">Settings</h3>
+            <p class="page-description" data-i18n="settings.description">Manage appearance, language and workspace data.</p>
           </div>
         </div>
 
         <div class="settings-grid">
-          <section class="panel">
+          <section class="panel settings-data-panel">
             <div class="panel-head">
-              <h4 data-i18n="settings.dataSource">Data Source</h4>
+              <div><h4 data-i18n="settings.dataSource">Data Source</h4><p data-i18n="settings.dataDescription">Database status and portable backups</p></div>
             </div>
             <div class="settings-copy" id="dataSourceSummary"></div>
             <p class="settings-copy" data-i18n="settings.backupWarning">Backup import can replace creator data. Use it only with a trusted exported backup.</p>
@@ -207,14 +219,14 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel settings-preferences-panel">
             <div class="panel-head">
-              <h4 data-i18n="settings.preferences">Preferences</h4>
+              <div><h4 data-i18n="settings.preferences">Preferences</h4><p data-i18n="settings.preferencesDescription">Personalize this browser</p></div>
             </div>
             <div class="preference-grid">
               <label>
                 <span data-i18n="settings.accent">Accent Color</span>
-                <input id="accentColor" type="color" value="#3dd6d0" />
+                <input id="accentColor" type="color" value="#8b5cf6" />
               </label>
               <label>
                 <span data-i18n="settings.density">Density</span>
@@ -237,9 +249,9 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel settings-integrations-panel">
             <div class="panel-head">
-              <h4 data-i18n="settings.integrations">Future Integrations</h4>
+              <div><h4 data-i18n="settings.integrations">Future Integrations</h4><p data-i18n="settings.integrationsDescription">Prepared extension points; no external connection is active</p></div>
             </div>
             <div class="integration-list" id="integrationList"></div>
           </section>
@@ -251,6 +263,7 @@
           <div>
             <p class="eyebrow" data-i18n="admin.roleAccess">Role-based access</p>
             <h3 id="adminTitle" data-i18n="nav.admin">Admin</h3>
+            <p class="page-description" data-i18n="admin.description">Manage access, backups and workspace audit events.</p>
           </div>
           <div class="button-row">
             <button class="button button-secondary" id="createBackup" type="button" data-i18n="admin.createBackup">Create Backup</button>
@@ -259,16 +272,16 @@
         </div>
 
         <div class="settings-grid">
-          <section class="panel">
+          <section class="panel admin-users-panel">
             <div class="panel-head">
-              <h4 data-i18n="admin.users">Users</h4>
+              <div><h4 data-i18n="admin.users">Users</h4><p data-i18n="admin.usersDescription">Discord accounts and assigned roles</p></div>
             </div>
             <div class="admin-list" id="usersList"></div>
           </section>
 
-          <section class="panel">
+          <section class="panel admin-backups-panel">
             <div class="panel-head">
-              <h4 data-i18n="admin.backups">Backups</h4>
+              <div><h4 data-i18n="admin.backups">Backups</h4><p data-i18n="admin.backupsDescription">Restore points stored by the server</p></div>
             </div>
             <div class="admin-list" id="backupsList"></div>
           </section>
@@ -276,7 +289,7 @@
 
         <section class="panel audit-panel">
           <div class="panel-head">
-            <h4 data-i18n="admin.audit">Audit Log</h4>
+            <div><h4 data-i18n="admin.audit">Audit Log</h4><p data-i18n="admin.auditDescription">Immutable record of administrative changes</p></div>
           </div>
           <div class="audit-list" id="auditList"></div>
         </section>
@@ -284,7 +297,7 @@
     </main>
   </div>
 
-  <dialog class="creator-dialog" id="creatorDialog">
+  <dialog class="creator-dialog" id="creatorDialog" aria-labelledby="modalName">
     <form method="dialog" class="dialog-shell">
       <div class="dialog-head">
         <div>
@@ -293,7 +306,7 @@
         </div>
         <div class="dialog-head-actions">
           <span class="workflow-save-state" id="modalSaveState" hidden></span>
-          <button class="icon-button dialog-close" id="closeDialog" type="button" aria-label="Close" title="Close" data-i18n-aria-label="common.close" data-i18n-title="common.close">X</button>
+          <button class="icon-button dialog-close" id="closeDialog" type="button" aria-label="Close" title="Close" data-i18n-aria-label="common.close" data-i18n-title="common.close"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
         </div>
       </div>
       <div id="modalBody"></div>
