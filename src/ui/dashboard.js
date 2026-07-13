@@ -1,6 +1,7 @@
 import { getCreatorStats, getPlatformDistribution } from "../utils/calculations.js";
 import { daysSinceUpload, uploadAgeLabel, uploadAgeTone } from "../utils/dates.js";
-import { renderAvatar } from "../utils/creatorVisuals.js";
+import { getNsapHealth, renderAvatar } from "../utils/creatorVisuals.js";
+import { t } from "../i18n/index.js";
 import { escapeHtml } from "../utils/format.js";
 
 export function renderDashboard(creators) {
@@ -16,20 +17,20 @@ function renderStats(creators) {
   const syncedToday = creators.filter((creator) => creator.lastSync && localDateKey(new Date(creator.lastSync)) === today).length;
   const syncFailures = creators.filter((creator) => creator.nsapMatchStatus === "sync_failed" || ["failed", "channel_not_found"].includes(creator.syncStatus)).length;
   const nsapUploadsToday = creators.filter((creator) => creator.latestNsapUploadDate === today).length;
-  const activeNsapCreators = creators.filter((creator) => (daysSinceUpload(creator.latestNsapUploadDate) ?? Infinity) <= 14).length;
+  const activeNsapCreators = creators.filter((creator) => getNsapHealth(creator).labelKey === "health.healthy").length;
   const noMatches = creators.filter((creator) => creator.nsapMatchStatus === "no_match").length;
   const manualReview = creators.filter((creator) => creator.nsapMatchStatus === "no_match" && creator.latestChannelVideoUrl).length;
   const cards = [
-    ["Total Creators", stats.total],
-    ["Active NSAP Creators", activeNsapCreators],
-    ["Need Follow-up", stats.followUp],
-    ["Collaboration Missing", stats.collabMissing],
-    ["Average Upload Age", stats.averageUploadAge === null ? "Unknown" : `${stats.averageUploadAge} days`],
-    ["Creators Synced Today", syncedToday],
-    ["NSAP Uploads Today", nsapUploadsToday],
-    ["No Matching NSAP Content", noMatches],
-    ["Manual Review Needed", manualReview],
-    ["Sync Failures", syncFailures],
+    [t("dashboard.totalCreators"), stats.total],
+    [t("dashboard.activeNsapCreators"), activeNsapCreators],
+    [t("dashboard.needFollowUp"), stats.followUp],
+    [t("dashboard.collaborationMissing"), stats.collabMissing],
+    [t("dashboard.averageUploadAge"), stats.averageUploadAge === null ? t("common.unknown") : t("date.uploadDaysAgo", { count: stats.averageUploadAge })],
+    [t("dashboard.syncedToday"), syncedToday],
+    [t("dashboard.nsapUploadsToday"), nsapUploadsToday],
+    [t("dashboard.noMatching"), noMatches],
+    [t("dashboard.manualReview"), manualReview],
+    [t("dashboard.syncFailures"), syncFailures],
   ];
 
   document.getElementById("statsGrid").innerHTML = cards
@@ -54,7 +55,7 @@ function renderPlatformDistribution(creators) {
   const container = document.getElementById("platformDistribution");
 
   if (!distribution.length) {
-    container.innerHTML = `<p class="empty-state">No creator data loaded.</p>`;
+    container.innerHTML = `<p class="empty-state">${t("dashboard.noData")}</p>`;
     return;
   }
 
@@ -87,21 +88,21 @@ function renderAttentionList(creators) {
   const container = document.getElementById("attentionList");
 
   if (!attention.length) {
-    container.innerHTML = `<p class="empty-state">No creators need attention right now.</p>`;
+    container.innerHTML = `<p class="empty-state">${t("dashboard.noAttention")}</p>`;
     return;
   }
 
   container.innerHTML = attention
     .map((creator) => {
-      const days = daysSinceUpload(creator.latestNsapUploadDate);
+      const health = getNsapHealth(creator);
       return `
         <button class="attention-item" data-open-creator="${escapeHtml(creator.id)}" type="button">
           ${renderAvatar(creator)}
           <span>
             <strong>${escapeHtml(creator.name)}</strong>
-            <small>${escapeHtml(creator.platform)} / ${escapeHtml(uploadAgeLabel(days))}</small>
+            <small>${escapeHtml(creator.platform)} / ${escapeHtml(health.label)}</small>
           </span>
-          <b class="age age-${uploadAgeTone(days)}">${escapeHtml(creator.priority)}</b>
+          <b class="age age-${health.tone}">${escapeHtml(creator.priority)}</b>
         </button>
       `;
     })
@@ -113,7 +114,7 @@ function renderNotifications(creators) {
   const notifications = getNotifications(creators).slice(0, 8);
 
   if (!notifications.length) {
-    container.innerHTML = `<p class="empty-state">No notifications from current creator data.</p>`;
+    container.innerHTML = `<p class="empty-state">${t("dashboard.noNotifications")}</p>`;
     return;
   }
 
@@ -136,14 +137,15 @@ function getNotifications(creators) {
   const tomorrowKey = tomorrow.toISOString().slice(0, 10);
 
   return creators.flatMap((creator) => {
-    const days = daysSinceUpload(creator.latestNsapUploadDate);
+    const health = getNsapHealth(creator);
+    const days = health.verified ? health.days : null;
     const items = [];
 
     if (days !== null && days <= 7) {
       items.push({
         creator,
         tone: "good",
-        title: `${creator.name} posted NSAP content recently.`,
+        title: t("dashboard.uploadedRecently", { name: creator.name }),
         detail: `${uploadAgeLabel(days)} on ${creator.platform}.`,
       });
     }
@@ -152,8 +154,8 @@ function getNotifications(creators) {
       items.push({
         creator,
         tone: "bad",
-        title: `${creator.name} needs follow-up.`,
-        detail: `${uploadAgeLabel(days)} since last NSAP upload.`,
+        title: t("dashboard.needsFollowUpTitle", { name: creator.name }),
+        detail: t("dashboard.sinceNsapUpload", { age: uploadAgeLabel(days) }),
       });
     }
 

@@ -1121,6 +1121,26 @@ button:disabled {
   padding: 18px 20px 0;
 }
 
+.nsap-review-section .modal-actions-row {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.nsap-review-section .modal-actions-row > div {
+  flex: 1 1 220px;
+  max-width: 340px;
+}
+
+.nsap-review-section .modal-actions-row .button {
+  width: 100%;
+}
+
+.nsap-review-section .settings-copy {
+  margin: 8px 0 0;
+}
+
 .reminder-tools,
 .timeline-composer {
   display: grid;

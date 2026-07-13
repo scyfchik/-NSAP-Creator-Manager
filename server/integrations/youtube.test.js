@@ -2,7 +2,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { matchNsapContent } = require("./nsapContentMatcher");
-const { RequestThrottle, YouTubeSyncError, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed } = require("./youtube");
+const { validateNsapDecision } = require("../validation");
+const { RequestThrottle, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed, selectYouTubeFeed } = require("./youtube");
 const { TaskQueue, createYouTubeSyncManager, reconcileNsapResult } = require("./youtubeSync");
 
 const CHANNEL_ID = "UC1234567890123456789012";
@@ -30,6 +31,20 @@ async function run() {
   assert.equal(upload.latestNsapVideoTitle, "Night Shift at Paulie's is TERRIFYING");
   assert.equal(upload.latestNsapUploadDate, "2026-07-01");
   assert.equal(upload.nsapMatchStatus, "matched");
+  const filtered = selectYouTubeFeed(upload.entries, ["https://www.youtube.com/watch?v=older"]);
+  assert.equal(filtered.nsapMatchStatus, "no_match");
+  assert.equal(filtered.latestNsapVideoUrl, "", "a rejected exact URL must not reappear as the NSAP match");
+  const withOlderFallback = selectYouTubeFeed([
+    ...upload.entries,
+    {
+      title: "NSAP Roblox update",
+      description: "",
+      published: "2026-06-15T10:00:00+00:00",
+      url: "https://www.youtube.com/watch?v=oldest",
+    },
+  ], ["https://www.youtube.com/watch?v=older"]);
+  assert.equal(withOlderFallback.latestNsapVideoUrl, "https://www.youtube.com/watch?v=oldest");
+  assert.equal(withOlderFallback.latestNsapUploadDate, "2026-06-15");
   const descriptionMatch = parseYouTubeFeed(FEED.replace("Night Shift at Paulie's is TERRIFYING", "Cooking tutorial").replace("Roblox gameplay", "#NightShiftAtPaulies"));
   assert.equal(descriptionMatch.nsapMatchStatus, "matched");
   assert.match(descriptionMatch.nsapMatchReason, /description hashtag/);
@@ -77,7 +92,23 @@ async function run() {
   await Promise.all([queue.add(async () => order.push(1)), queue.add(async () => order.push(2))]);
   assert.deepEqual(order, [1, 2]);
 
+  assert.deepEqual(validateNsapDecision({
+    decision: "manual_confirmed",
+    videoTitle: "Exact NSAP candidate",
+    videoUrl: "https://www.youtube.com/watch?v=exact",
+    videoUploadDate: "2026-07-12",
+  }), {
+    decision: "manual_confirmed",
+    videoTitle: "Exact NSAP candidate",
+    videoUrl: "https://www.youtube.com/watch?v=exact",
+    videoUploadDate: "2026-07-12",
+  });
+  assert.throws(() => validateNsapDecision({ decision: "manual_rejected", videoTitle: "Bad", videoUrl: "javascript:alert(1)", videoUploadDate: "2026-07-12" }), /valid YouTube/);
+  assert.throws(() => validateNsapDecision({ decision: "manual_rejected", videoTitle: "Bad date", videoUrl: "https://youtu.be/exact", videoUploadDate: "2026-02-31" }), /valid YouTube/);
+  assert.deepEqual(validateNsapDecision({ decision: "clear_manual_decision" }), { decision: "clear_manual_decision", videoTitle: "", videoUrl: "", videoUploadDate: "" });
+
   await testProgress();
+  await testExactReviewFlow();
   assertFrontendUsesNsapDate();
   console.log("YouTube sync tests passed");
 }
@@ -89,6 +120,10 @@ function assertFrontendUsesNsapDate() {
     assert.match(source, /latestNsapUploadDate/, `${file} must use latestNsapUploadDate`);
     assert.doesNotMatch(source, /creator\.lastUploadDate|[ab]\.lastUploadDate/, `${file} must not use general lastUploadDate for activity`);
   });
+  ["src/ui/dashboard.js", "src/ui/creatorsTable.js", "src/ui/modal.js"].forEach((file) => {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.match(source, /getNsapHealth|renderUploadHealth/, `${file} must use the shared verified NSAP health calculation`);
+  });
 }
 
 async function testProgress() {
@@ -96,6 +131,7 @@ async function testProgress() {
   const dbApi = {
     getCreators: async () => creators,
     getCreator: async (id) => creators.find((creator) => creator.id === id),
+    getCreatorNsapReviews: async () => [],
     getYouTubeChannelMapping: async () => null,
     setYouTubeChannelMapping: async () => {},
     updateCreatorYouTubeSync: async ({ creatorId, result }) => Object.assign(creators.find((creator) => creator.id === creatorId), result),
@@ -112,6 +148,46 @@ async function testProgress() {
   assert.equal(job.completed, 2);
   assert.equal(creators[0].syncStatus, "synced");
   assert.equal(creators[1].syncStatus, "manual");
+}
+
+async function testExactReviewFlow() {
+  const creator = {
+    id: "reviewed",
+    name: "Reviewed Creator",
+    platform: "YouTube",
+    youtubeUrl: `https://youtube.com/channel/${CHANNEL_ID}`,
+    latestChannelVideoTitle: "Minecraft survival episode 4",
+    latestChannelVideoUrl: "https://www.youtube.com/watch?v=newest",
+    latestChannelUploadDate: "2026-07-12",
+    latestNsapVideoTitle: "Night Shift at Paulie's is TERRIFYING",
+    latestNsapVideoUrl: "https://www.youtube.com/watch?v=older",
+    latestNsapUploadDate: "2026-07-01",
+    nsapMatchStatus: "matched",
+  };
+  const persistedReviews = [];
+  let updateArgs;
+  const dbApi = {
+    getCreator: async () => creator,
+    getCreatorNsapReviews: async () => persistedReviews,
+    getYouTubeChannelMapping: async () => null,
+    setYouTubeChannelMapping: async () => {},
+    updateCreatorNsapDecision: async (args) => {
+      updateArgs = args;
+      return { ...creator, ...args.automaticResult };
+    },
+  };
+  const manager = createYouTubeSyncManager({ dbApi, minRequestIntervalMs: 0, fetchImpl: async () => response(FEED) });
+  const review = {
+    decision: "manual_rejected",
+    videoTitle: creator.latestNsapVideoTitle,
+    videoUrl: creator.latestNsapVideoUrl,
+    videoUploadDate: creator.latestNsapUploadDate,
+  };
+  const result = await manager.reviewCreator(creator.id, review, { username: "Manager" }, "127.0.0.1");
+  assert.equal(updateArgs.review.videoUrl, creator.latestNsapVideoUrl);
+  assert.equal(updateArgs.automaticResult.nsapMatchStatus, "no_match");
+  assert.equal(updateArgs.automaticResult.latestNsapVideoUrl, "");
+  assert.equal(result.nsapMatchStatus, "no_match");
 }
 
 function response(body, status = 200) {

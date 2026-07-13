@@ -32,7 +32,9 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
     if (!creator || creator.deleted) return null;
     const lastSync = new Date().toISOString();
     try {
-      const upload = await client.syncCreator(creator);
+      const reviews = await dbApi.getCreatorNsapReviews(creatorId);
+      const excludedVideoUrls = reviews.filter((review) => review.decision === "manual_rejected").map((review) => review.video_url);
+      const upload = await client.syncCreator(creator, { excludedVideoUrls });
       const result = reconcileNsapResult(creator, upload);
       return dbApi.updateCreatorYouTubeSync({ creatorId, user, ip, result: { ...result, lastSync, syncStatus: "synced", syncError: "" } });
     } catch (error) {
@@ -51,6 +53,25 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
         },
       });
     }
+  }
+
+  async function reviewCreator(creatorId, review, user, ip) {
+    const creator = await dbApi.getCreator(creatorId);
+    if (!creator || creator.deleted) return null;
+    let automaticResult = null;
+    if (review.decision !== "manual_confirmed") {
+      const reviews = review.decision === "clear_manual_decision" ? [] : await dbApi.getCreatorNsapReviews(creatorId);
+      const excludedVideoUrls = review.decision === "manual_rejected"
+        ? [...reviews.filter((item) => item.decision === "manual_rejected").map((item) => item.video_url), review.videoUrl]
+        : [];
+      try {
+        automaticResult = await client.syncCreator(creator, { excludedVideoUrls });
+      } catch (error) {
+        error.status = error.status || 502;
+        throw error;
+      }
+    }
+    return dbApi.updateCreatorNsapDecision({ creatorId, review, automaticResult, user, ip });
   }
 
   async function startSyncAll(user, ip) {
@@ -79,7 +100,7 @@ function createYouTubeSyncManager({ dbApi = db, fetchImpl = globalThis.fetch, mi
 
   function getJob(id) { const job = jobs.get(id); return job ? { ...job } : null; }
   function pruneJobs() { while (jobs.size > 50) jobs.delete(jobs.keys().next().value); }
-  return { getJob, startSyncAll, syncCreator };
+  return { getJob, reviewCreator, startSyncAll, syncCreator };
 }
 
 function reconcileNsapResult(creator, upload) {

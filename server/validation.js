@@ -247,10 +247,31 @@ function validateProfileUpdate(payload) {
 }
 
 function validateNsapDecision(payload) {
-  if (!payload || !["confirmed", "rejected"].includes(payload.decision)) {
-    throwRequestError("NSAP decision must be confirmed or rejected.", 400);
+  const allowed = ["manual_confirmed", "manual_rejected", "clear_manual_decision"];
+  if (!payload || typeof payload !== "object" || !allowed.includes(payload.decision)) {
+    throwRequestError("Invalid NSAP review decision.", 400);
   }
-  return payload.decision;
+  if (payload.decision === "clear_manual_decision") {
+    return { decision: payload.decision, videoTitle: "", videoUrl: "", videoUploadDate: "" };
+  }
+
+  const videoTitle = sanitizeText(payload.videoTitle || "", 500);
+  const videoUrl = sanitizeUrl(payload.videoUrl || "");
+  const videoUploadDate = sanitizeText(payload.videoUploadDate || "", 32);
+  if (!videoTitle || !videoUrl || !isYouTubeUrl(videoUrl) || !isDateLike(videoUploadDate)) {
+    throwRequestError("A valid YouTube video title, URL, and upload date are required.", 400);
+  }
+  return { decision: payload.decision, videoTitle, videoUrl, videoUploadDate };
+}
+
+function isYouTubeUrl(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === "https:" && (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"));
+  } catch {
+    return false;
+  }
 }
 
 function normalizeTimelineEntry(entry, actor = null) {

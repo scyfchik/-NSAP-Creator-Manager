@@ -83,6 +83,38 @@ const migrations = [{
       latest_channel_upload_date = COALESCE(latest_channel_upload_date, last_upload);
   `,
   sqlite: "SELECT 1;",
+}, {
+  id: "005_creator_nsap_video_reviews",
+  postgres: `
+    CREATE TABLE IF NOT EXISTS creator_nsap_video_reviews (
+      id BIGSERIAL PRIMARY KEY,
+      creator_id TEXT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+      video_url TEXT NOT NULL,
+      video_title TEXT NOT NULL,
+      video_upload_date DATE NOT NULL,
+      decision TEXT NOT NULL CHECK (decision IN ('manual_confirmed', 'manual_rejected')),
+      actor TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (creator_id, video_url)
+    );
+    CREATE INDEX IF NOT EXISTS creator_nsap_reviews_creator_idx ON creator_nsap_video_reviews(creator_id);
+  `,
+  sqlite: `
+    CREATE TABLE IF NOT EXISTS creator_nsap_video_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      creator_id TEXT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+      video_url TEXT NOT NULL,
+      video_title TEXT NOT NULL,
+      video_upload_date TEXT NOT NULL,
+      decision TEXT NOT NULL CHECK (decision IN ('manual_confirmed', 'manual_rejected')),
+      actor TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (creator_id, video_url)
+    );
+    CREATE INDEX IF NOT EXISTS creator_nsap_reviews_creator_idx ON creator_nsap_video_reviews(creator_id);
+  `,
 }];
 
 async function runMigrations(db) {

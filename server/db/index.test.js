@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { __testing } = require("./index");
 
 function run() {
@@ -79,11 +81,17 @@ function run() {
   assert.equal(mapped.latestNsapUploadDate, "2026-07-10", "PostgreSQL NSAP date must override stale payload JSON");
   assert.equal(mapped.nsapMatchStatus, "matched", "PostgreSQL match status must remain authoritative");
 
-  const manuallyConfirmed = __testing.applyCreatorNsapDecision({
+  const confirmReview = {
+    decision: "manual_confirmed",
+    videoTitle: "Manual NSAP video",
+    videoUrl: "https://www.youtube.com/watch?v=manual",
+    videoUploadDate: "2026-07-11",
+  };
+  const manuallyConfirmed = __testing.applyCreatorNsapReview({
     latestChannelVideoTitle: "Manual NSAP video",
     latestChannelVideoUrl: "https://www.youtube.com/watch?v=manual",
     latestChannelUploadDate: "2026-07-11",
-  }, "confirmed", { username: "Manager One" }, "2026-07-12T13:00:00.000Z");
+  }, confirmReview, null, { username: "Manager One" }, "2026-07-12T13:00:00.000Z");
   assert.equal(manuallyConfirmed.nsapMatchStatus, "manual_confirmed");
   assert.equal(manuallyConfirmed.latestNsapVideoTitle, "Manual NSAP video");
   assert.equal(manuallyConfirmed.nsapDecisionActor, "Manager One");
@@ -94,15 +102,72 @@ function run() {
   assert.equal(manualContract.params[manualContract.columns.indexOf("nsap_decision_actor")], "Manager One");
   assert.equal(manualContract.params[manualContract.columns.indexOf("nsap_decision_at")], "2026-07-12T13:00:00.000Z");
 
-  const manuallyRejected = __testing.applyCreatorNsapDecision({
+  const rejectedReview = {
+    decision: "manual_rejected",
+    videoTitle: "Unrelated video",
+    videoUrl: "https://www.youtube.com/watch?v=unrelated",
+    videoUploadDate: "2026-07-12",
+  };
+  const manuallyRejected = __testing.applyCreatorNsapReview({
     latestChannelVideoTitle: "Unrelated video",
     latestChannelVideoUrl: "https://www.youtube.com/watch?v=unrelated",
     latestChannelUploadDate: "2026-07-12",
-    latestNsapVideoTitle: "Previous NSAP video",
+  }, rejectedReview, {
+    latestChannelVideoTitle: "Unrelated video",
+    latestChannelVideoUrl: "https://www.youtube.com/watch?v=unrelated",
+    latestChannelUploadDate: "2026-07-12",
+    latestNsapVideoTitle: "Older valid NSAP video",
+    latestNsapVideoUrl: "https://www.youtube.com/watch?v=older",
     latestNsapUploadDate: "2026-06-01",
-  }, "rejected", { username: "Manager Two" }, "2026-07-12T14:00:00.000Z");
-  assert.equal(manuallyRejected.nsapMatchStatus, "manual_rejected");
-  assert.equal(manuallyRejected.latestNsapVideoTitle, "Previous NSAP video", "manual rejection must preserve previous NSAP activity");
+    nsapMatchStatus: "matched",
+    nsapMatchReason: "Matched older RSS entry",
+    nsapMatchedKeyword: "night shift at paulie's",
+  }, { username: "Manager Two" }, "2026-07-12T14:00:00.000Z");
+  assert.equal(manuallyRejected.nsapMatchStatus, "matched");
+  assert.equal(manuallyRejected.latestNsapVideoTitle, "Older valid NSAP video", "rejection must recalculate to the next valid RSS match");
+  assert.equal(manuallyRejected.nsapDecisionVideoUrl, rejectedReview.videoUrl, "the rejected exact URL must remain recorded");
+
+  assert.equal(__testing.isCurrentNsapCandidate({
+    latestChannelVideoTitle: rejectedReview.videoTitle,
+    latestChannelVideoUrl: rejectedReview.videoUrl,
+    latestChannelUploadDate: rejectedReview.videoUploadDate,
+  }, rejectedReview), true);
+  assert.equal(__testing.isCurrentNsapCandidate({
+    latestChannelVideoTitle: rejectedReview.videoTitle,
+    latestChannelVideoUrl: "https://www.youtube.com/watch?v=different",
+    latestChannelUploadDate: rejectedReview.videoUploadDate,
+  }, rejectedReview), false, "a stale or substituted candidate must be rejected");
+
+  const cleared = __testing.applyCreatorNsapReview({ ...manuallyRejected }, {
+    decision: "clear_manual_decision",
+    videoTitle: "",
+    videoUrl: "",
+    videoUploadDate: "",
+  }, {
+    latestChannelVideoTitle: "Unrelated video",
+    latestChannelVideoUrl: "https://www.youtube.com/watch?v=unrelated",
+    latestChannelUploadDate: "2026-07-12",
+    latestNsapVideoTitle: "Automatically restored video",
+    latestNsapVideoUrl: "https://www.youtube.com/watch?v=restored",
+    latestNsapUploadDate: "2026-07-10",
+    nsapMatchStatus: "matched",
+    nsapMatchReason: "Automatic match restored",
+    nsapMatchedKeyword: "nsap roblox",
+  }, { username: "Manager Two" }, "2026-07-12T15:00:00.000Z");
+  assert.equal(cleared.latestNsapVideoTitle, "Automatically restored video");
+  assert.equal(cleared.nsapDecisionVideoUrl, "");
+  assert.equal(cleared.nsapDecisionActor, "");
+
+  const migrationsSource = fs.readFileSync(path.join(__dirname, "migrations.js"), "utf8");
+  assert.match(migrationsSource, /005_creator_nsap_video_reviews/);
+  assert.match(migrationsSource, /creator_id TEXT NOT NULL REFERENCES creators\(id\) ON DELETE CASCADE/);
+  assert.match(migrationsSource, /UNIQUE \(creator_id, video_url\)/, "PostgreSQL review rows must be unique per exact creator/video candidate");
+  assert.match(migrationsSource, /decision IN \('manual_confirmed', 'manual_rejected'\)/);
+  const dbSource = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+  assert.match(dbSource, /const values = \[creatorId, review\.videoUrl, review\.videoTitle, review\.videoUploadDate, review\.decision, user\?\.username \|\| "Manager"\]/);
+  assert.match(dbSource, /INSERT INTO creator_nsap_video_reviews \(creator_id,video_url,video_title,video_upload_date,decision,actor\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6\)/, "PostgreSQL review parameter order must match its columns");
+  assert.match(dbSource, /action: `creator\.youtube\.nsap\.\$\{review\.decision\}`/, "every review decision must create a distinct audit action");
+  assert.match(dbSource, /await insertAudit\([\s\S]*?return getCreator\(creatorId, tx\)/, "review updates must audit and return a fresh database read-back");
   console.log("PostgreSQL creator UPSERT contract tests passed");
 }
 

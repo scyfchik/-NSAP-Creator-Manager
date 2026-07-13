@@ -1,4 +1,5 @@
 import { daysSinceUpload, uploadAgeLabel, uploadAgeTone } from "./dates.js";
+import { t } from "../i18n/index.js";
 import { escapeHtml, safeUrl, toKebab } from "./format.js";
 
 const labelTone = {
@@ -39,25 +40,35 @@ export function renderAvatar(creator, size = "") {
 
 export function renderBadge(label, type = label) {
   const tone = labelTone[label] ?? toKebab(type);
-  return `<span class="badge badge-${toKebab(type)} badge-tone-${tone}"><span class="badge-dot"></span>${escapeHtml(label)}</span>`;
+  const translated = t(`value.${label}`);
+  return `<span class="badge badge-${toKebab(type)} badge-tone-${tone}"><span class="badge-dot"></span>${escapeHtml(translated === `value.${label}` ? label : translated)}</span>`;
 }
 
-export function getUploadHealth(creator) {
+export function getNsapHealth(creator) {
+  const status = creator.nsapMatchStatus;
+  if (status === "sync_failed") return healthResult("bad", "health.syncFailed");
+  if (status === "manual_rejected" || !status) return healthResult("watch", "health.manualReview");
+  if (["no_match", "unsupported"].includes(status)) return healthResult("unknown", "health.noContent");
+  if (!["matched", "manual_confirmed"].includes(status)) return healthResult("watch", "health.manualReview");
+
   const days = daysSinceUpload(creator.latestNsapUploadDate);
+  if (days === null) return healthResult("unknown", "health.noContent");
   const tone = uploadAgeTone(days);
-  const label = tone === "good" ? "Healthy" : tone === "watch" ? "Watch" : tone === "bad" ? "Needs Follow-up" : "Unknown";
+  const labelKey = tone === "good" ? "health.healthy" : tone === "watch" ? "health.warning" : "health.inactive";
 
   return {
     days,
     tone,
-    label,
+    labelKey,
+    label: t(labelKey),
     date: creator.latestNsapUploadDate || "Unknown",
     age: uploadAgeLabel(days),
+    verified: true,
   };
 }
 
 export function renderUploadHealth(creator) {
-  const health = getUploadHealth(creator);
+  const health = getNsapHealth(creator);
   return `
     <span class="upload-health">
       <strong>${escapeHtml(health.date)}</strong>
@@ -65,4 +76,8 @@ export function renderUploadHealth(creator) {
       <b class="age age-${health.tone}">${escapeHtml(health.label)}</b>
     </span>
   `;
+}
+
+function healthResult(tone, labelKey) {
+  return { days: null, tone, labelKey, label: t(labelKey), date: t("common.unknown"), age: t("common.unknown"), verified: false };
 }

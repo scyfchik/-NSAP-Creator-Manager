@@ -1,3 +1,5 @@
+import { t } from "../i18n/index.js";
+
 async function request(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const headers = {
@@ -39,12 +41,12 @@ async function request(path, options = {}) {
 function normalizeErrorMessage(status, payload) {
   const serverMessage = payload?.error || "";
   if (status === 401) {
-    return serverMessage || "Session expired. Please log in again.";
+    return serverMessage || t("error.sessionExpired");
   }
   if (status === 403 && /csrf/i.test(serverMessage)) {
-    return "Session expired. Please refresh and try again.";
+    return t("error.refreshSession");
   }
-  return serverMessage || `Request failed: ${status}`;
+  return serverMessage || t("error.requestFailed", { status });
 }
 
 function readCookie(name) {
@@ -101,10 +103,10 @@ export const api = {
   syncYouTubeCreator(creatorId) {
     return request(`/api/creators/${encodeURIComponent(creatorId)}/sync/youtube`, { method: "POST", body: JSON.stringify({}) });
   },
-  setNsapDecision(creatorId, decision) {
+  setNsapDecision(creatorId, payload) {
     return request(`/api/creators/${encodeURIComponent(creatorId)}/youtube/nsap-decision`, {
       method: "POST",
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify(payload),
     });
   },
   startYouTubeSyncAll() {

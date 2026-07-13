@@ -9,40 +9,40 @@
 </head>
 <body>
   <div class="app">
-    <aside class="sidebar" aria-label="Workspace navigation">
+    <aside class="sidebar" aria-label="Workspace navigation" data-i18n-aria-label="nav.workspace">
       <div class="brand">
         <div class="logo">N</div>
         <div>
           <h1>NSAP</h1>
-          <p>Creator Manager</p>
+          <p data-i18n="app.creatorManager">Creator Manager</p>
         </div>
-        <button class="icon-button sidebar-toggle" id="sidebarToggle" type="button" aria-label="Collapse sidebar" title="Collapse sidebar"><<</button>
+        <button class="icon-button sidebar-toggle" id="sidebarToggle" type="button" aria-label="Collapse sidebar" title="Collapse sidebar" data-i18n-aria-label="nav.collapse" data-i18n-title="nav.collapse"><<</button>
       </div>
 
-      <nav class="nav-list" aria-label="Primary">
+      <nav class="nav-list" aria-label="Primary" data-i18n-aria-label="nav.primary">
         <button class="nav-item active" data-view="dashboard" type="button" title="Dashboard">
           <span class="nav-icon">D</span>
-          Dashboard
+          <span data-i18n="nav.dashboard">Dashboard</span>
         </button>
         <button class="nav-item" data-view="creators" type="button" title="Creators">
           <span class="nav-icon">C</span>
-          Creators
+          <span data-i18n="nav.creators">Creators</span>
         </button>
         <button class="nav-item" data-filter-shortcut="followUp" type="button" title="Needs Follow-up">
           <span class="nav-icon">F</span>
-          Needs Follow-up
+          <span data-i18n="nav.followUp">Needs Follow-up</span>
         </button>
         <button class="nav-item" data-filter-shortcut="collabMissing" type="button" title="Collab Missing">
           <span class="nav-icon">M</span>
-          Collab Missing
+          <span data-i18n="nav.collabMissing">Collab Missing</span>
         </button>
         <button class="nav-item" data-view="settings" type="button" title="Settings">
           <span class="nav-icon">S</span>
-          Settings
+          <span data-i18n="nav.settings">Settings</span>
         </button>
         <button class="nav-item admin-only" data-view="admin" type="button" title="Admin" hidden>
           <span class="nav-icon">A</span>
-          Admin
+          <span data-i18n="nav.admin">Admin</span>
         </button>
       </nav>
       <span class="sidebar-resizer" id="sidebarResizer" aria-hidden="true"></span>
@@ -51,38 +51,38 @@
     <main class="main-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Creator Supervisor Dashboard</p>
-          <h2>Night Shift at Paulie's Creator Tracker</h2>
+          <p class="eyebrow" data-i18n="app.supervisorDashboard">Creator Supervisor Dashboard</p>
+          <h2 data-i18n="app.trackerTitle">Night Shift at Paulie's Creator Tracker</h2>
         </div>
         <div class="top-actions">
           <div class="auth-chip" id="authSummary">
-            <span id="authUser">Anonymous</span>
+            <span id="authUser" data-i18n="auth.anonymous">Anonymous</span>
             <b id="authRole">viewer</b>
           </div>
-          <a class="button button-primary" id="loginButton" href="/auth/discord">Login with Discord</a>
-          <button class="button button-secondary" id="logoutButton" type="button" hidden>Logout</button>
+          <a class="button button-primary" id="loginButton" href="/auth/discord" data-i18n="auth.login">Login with Discord</a>
+          <button class="button button-secondary" id="logoutButton" type="button" hidden data-i18n="auth.logout">Logout</button>
           <label class="search-box">
-            <span>Search</span>
-            <input id="searchInput" type="search" placeholder="Name, channel, platform, status, notes..." autocomplete="off" />
+            <span data-i18n="common.search">Search</span>
+            <input id="searchInput" type="search" placeholder="Name, channel, platform, status, notes..." data-i18n-placeholder="common.searchPlaceholder" autocomplete="off" />
           </label>
-          <button class="button button-secondary" id="undoEdit" type="button" disabled>Undo</button>
+          <button class="button button-secondary" id="undoEdit" type="button" disabled data-i18n="common.undo">Undo</button>
         </div>
       </header>
 
       <section class="view active" id="dashboardView" aria-labelledby="dashboardTitle">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Live overview</p>
-            <h3 id="dashboardTitle">Dashboard</h3>
+            <p class="eyebrow" data-i18n="dashboard.liveOverview">Live overview</p>
+            <h3 id="dashboardTitle" data-i18n="nav.dashboard">Dashboard</h3>
           </div>
           <div class="button-row">
-            <span class="save-state" id="saveState">Loading data</span>
-            <button class="button button-primary" id="syncAllYouTube" type="button" hidden>Sync All</button>
+            <span class="save-state" id="saveState" data-i18n="dashboard.loading">Loading data</span>
+            <button class="button button-primary" id="syncAllYouTube" type="button" hidden data-i18n="dashboard.syncAll">Sync All</button>
           </div>
         </div>
 
         <div class="sync-progress" id="youtubeSyncProgress" hidden>
-          <div><strong id="youtubeSyncCurrent">Preparing sync...</strong><span id="youtubeSyncCount"></span></div>
+          <div><strong id="youtubeSyncCurrent" data-i18n="dashboard.preparingSync">Preparing sync...</strong><span id="youtubeSyncCount"></span></div>
           <div class="sync-progress-track"><span id="youtubeSyncBar"></span></div>
         </div>
 
@@ -91,14 +91,14 @@
         <div class="dashboard-grid">
           <section class="panel platform-panel" aria-labelledby="platformTitle">
             <div class="panel-head">
-              <h4 id="platformTitle">Platform Distribution</h4>
+              <h4 id="platformTitle" data-i18n="dashboard.platformDistribution">Platform Distribution</h4>
             </div>
             <div id="platformDistribution"></div>
           </section>
 
           <section class="panel attention-panel" aria-labelledby="attentionTitle">
             <div class="panel-head">
-              <h4 id="attentionTitle">Needs Attention</h4>
+              <h4 id="attentionTitle" data-i18n="dashboard.needsAttention">Needs Attention</h4>
             </div>
             <div id="attentionList"></div>
           </section>
@@ -106,7 +106,7 @@
 
         <section class="panel notification-panel" aria-labelledby="notificationTitle">
           <div class="panel-head">
-            <h4 id="notificationTitle">Notification Center</h4>
+            <h4 id="notificationTitle" data-i18n="dashboard.notifications">Notification Center</h4>
           </div>
           <div id="notificationList"></div>
         </section>
@@ -115,59 +115,59 @@
       <section class="view" id="creatorsView" aria-labelledby="creatorsTitle">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Creator management</p>
-            <h3 id="creatorsTitle">Creators</h3>
+            <p class="eyebrow" data-i18n="creators.management">Creator management</p>
+            <h3 id="creatorsTitle" data-i18n="nav.creators">Creators</h3>
           </div>
           <div class="button-row">
-            <button class="button button-primary" id="addCreator" type="button" hidden>+ Add Creator</button>
-            <button class="button button-secondary" id="clearFilters" type="button">Clear Filters</button>
+            <button class="button button-primary" id="addCreator" type="button" hidden data-i18n="creators.add">+ Add Creator</button>
+            <button class="button button-secondary" id="clearFilters" type="button" data-i18n="creators.clearFilters">Clear Filters</button>
           </div>
         </div>
 
-        <section class="filter-bar" aria-label="Creator filters">
+        <section class="filter-bar" aria-label="Creator filters" data-i18n-aria-label="creators.filters">
           <label>
-            <span>Platform</span>
+            <span data-i18n="filter.platform">Platform</span>
             <select id="platformFilter"></select>
           </label>
           <label>
-            <span>Status</span>
+            <span data-i18n="filter.status">Status</span>
             <select id="statusFilter"></select>
           </label>
           <label>
-            <span>Priority</span>
+            <span data-i18n="filter.priority">Priority</span>
             <select id="priorityFilter"></select>
           </label>
           <label>
-            <span>Collab Posted</span>
+            <span data-i18n="filter.collabPosted">Collab Posted</span>
             <select id="collabPostedFilter">
-              <option value="all">All</option>
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
+              <option value="all" data-i18n="common.all">All</option>
+              <option value="Yes" data-i18n="common.yes">Yes</option>
+              <option value="No" data-i18n="common.no">No</option>
             </select>
           </label>
           <label>
-            <span>DM Sent</span>
+            <span data-i18n="filter.dmSent">DM Sent</span>
             <select id="dmSentFilter">
-              <option value="all">All</option>
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
+              <option value="all" data-i18n="common.all">All</option>
+              <option value="Yes" data-i18n="common.yes">Yes</option>
+              <option value="No" data-i18n="common.no">No</option>
             </select>
           </label>
           <label class="toggle-row">
             <input id="followUpFilter" type="checkbox" />
-            <span>Needs Follow-up</span>
+            <span data-i18n="filter.followUp">Needs Follow-up</span>
           </label>
           <label class="toggle-row">
             <input id="collabFilter" type="checkbox" />
-            <span>Collaboration Missing</span>
+            <span data-i18n="filter.collabMissing">Collaboration Missing</span>
           </label>
         </section>
 
-        <section class="data-card" aria-label="Creator table">
+        <section class="data-card" aria-label="Creator table" data-i18n-aria-label="creators.table">
           <div class="table-toolbar">
             <p id="resultCount"></p>
             <label>
-              <span>Rows</span>
+              <span data-i18n="common.rows">Rows</span>
               <select id="pageSize">
                 <option value="5">5</option>
                 <option value="10" selected>10</option>
@@ -177,9 +177,9 @@
           </div>
           <div class="data-table" id="creatorTable" role="table"></div>
           <div class="pagination">
-            <button class="button button-secondary" id="prevPage" type="button">Previous</button>
+            <button class="button button-secondary" id="prevPage" type="button" data-i18n="common.previous">Previous</button>
             <span id="pageIndicator"></span>
-            <button class="button button-secondary" id="nextPage" type="button">Next</button>
+            <button class="button button-secondary" id="nextPage" type="button" data-i18n="common.next">Next</button>
           </div>
         </section>
       </section>
@@ -187,52 +187,59 @@
       <section class="view" id="settingsView" aria-labelledby="settingsTitle">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Workspace controls</p>
-            <h3 id="settingsTitle">Settings</h3>
+            <p class="eyebrow" data-i18n="settings.controls">Workspace controls</p>
+            <h3 id="settingsTitle" data-i18n="nav.settings">Settings</h3>
           </div>
         </div>
 
         <div class="settings-grid">
           <section class="panel">
             <div class="panel-head">
-              <h4>Data Source</h4>
+              <h4 data-i18n="settings.dataSource">Data Source</h4>
             </div>
             <div class="settings-copy" id="dataSourceSummary"></div>
-            <p class="settings-copy">Backup import can replace creator data. Use it only with a trusted exported backup.</p>
+            <p class="settings-copy" data-i18n="settings.backupWarning">Backup import can replace creator data. Use it only with a trusted exported backup.</p>
             <div class="button-row">
-              <button class="button button-secondary" id="resetLocalData" type="button">Refresh Database Data</button>
+              <button class="button button-secondary" id="resetLocalData" type="button" data-i18n="settings.refreshData">Refresh Database Data</button>
               <input id="importJsonInput" type="file" accept="application/json,.json" hidden />
-              <button class="button button-secondary" id="importJson" type="button" hidden>Import Backup</button>
-              <button class="button button-secondary" id="exportJson" type="button" hidden>Export Backup</button>
+              <button class="button button-secondary" id="importJson" type="button" hidden data-i18n="settings.import">Import Backup</button>
+              <button class="button button-secondary" id="exportJson" type="button" hidden data-i18n="settings.export">Export Backup</button>
             </div>
           </section>
 
           <section class="panel">
             <div class="panel-head">
-              <h4>Preferences</h4>
+              <h4 data-i18n="settings.preferences">Preferences</h4>
             </div>
             <div class="preference-grid">
               <label>
-                <span>Accent Color</span>
+                <span data-i18n="settings.accent">Accent Color</span>
                 <input id="accentColor" type="color" value="#3dd6d0" />
               </label>
               <label>
-                <span>Density</span>
+                <span data-i18n="settings.density">Density</span>
                 <select id="densityMode">
-                  <option value="comfortable">Comfortable</option>
-                  <option value="compact">Compact</option>
+                  <option value="comfortable" data-i18n="settings.comfortable">Comfortable</option>
+                  <option value="compact" data-i18n="settings.compact">Compact</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="settings.language">Language</span>
+                <select id="languageMode">
+                  <option value="en" data-i18n="settings.english">English</option>
+                  <option value="ru" data-i18n="settings.russian">Russian</option>
                 </select>
               </label>
             </div>
             <div class="button-row modal-actions-row">
-              <span class="dirty-badge" id="settingsDirtyBadge" hidden>Unsaved changes</span>
-              <button class="button button-primary" id="saveSettings" type="button" disabled>Save Changes</button>
+              <span class="dirty-badge" id="settingsDirtyBadge" hidden data-i18n="settings.unsaved">Unsaved changes</span>
+              <button class="button button-primary" id="saveSettings" type="button" disabled data-i18n="settings.save">Save Changes</button>
             </div>
           </section>
 
           <section class="panel">
             <div class="panel-head">
-              <h4>Future Integrations</h4>
+              <h4 data-i18n="settings.integrations">Future Integrations</h4>
             </div>
             <div class="integration-list" id="integrationList"></div>
           </section>
@@ -242,26 +249,26 @@
       <section class="view" id="adminView" aria-labelledby="adminTitle">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Role-based access</p>
-            <h3 id="adminTitle">Admin</h3>
+            <p class="eyebrow" data-i18n="admin.roleAccess">Role-based access</p>
+            <h3 id="adminTitle" data-i18n="nav.admin">Admin</h3>
           </div>
           <div class="button-row">
-            <button class="button button-secondary" id="createBackup" type="button">Create Backup</button>
-            <button class="button button-secondary" id="refreshAdmin" type="button">Refresh</button>
+            <button class="button button-secondary" id="createBackup" type="button" data-i18n="admin.createBackup">Create Backup</button>
+            <button class="button button-secondary" id="refreshAdmin" type="button" data-i18n="common.refresh">Refresh</button>
           </div>
         </div>
 
         <div class="settings-grid">
           <section class="panel">
             <div class="panel-head">
-              <h4>Users</h4>
+              <h4 data-i18n="admin.users">Users</h4>
             </div>
             <div class="admin-list" id="usersList"></div>
           </section>
 
           <section class="panel">
             <div class="panel-head">
-              <h4>Backups</h4>
+              <h4 data-i18n="admin.backups">Backups</h4>
             </div>
             <div class="admin-list" id="backupsList"></div>
           </section>
@@ -269,7 +276,7 @@
 
         <section class="panel audit-panel">
           <div class="panel-head">
-            <h4>Audit Log</h4>
+            <h4 data-i18n="admin.audit">Audit Log</h4>
           </div>
           <div class="audit-list" id="auditList"></div>
         </section>
@@ -281,12 +288,12 @@
     <form method="dialog" class="dialog-shell">
       <div class="dialog-head">
         <div>
-          <p class="eyebrow">Creator profile</p>
+          <p class="eyebrow" data-i18n="profile.title">Creator profile</p>
           <h3 id="modalName"></h3>
         </div>
         <div class="dialog-head-actions">
           <span class="workflow-save-state" id="modalSaveState" hidden></span>
-          <button class="icon-button dialog-close" id="closeDialog" type="button" aria-label="Close" title="Close">X</button>
+          <button class="icon-button dialog-close" id="closeDialog" type="button" aria-label="Close" title="Close" data-i18n-aria-label="common.close" data-i18n-title="common.close">X</button>
         </div>
       </div>
       <div id="modalBody"></div>

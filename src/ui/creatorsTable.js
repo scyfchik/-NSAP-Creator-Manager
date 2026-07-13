@@ -1,17 +1,18 @@
 import { renderAvatar, renderBadge, renderUploadHealth } from "../utils/creatorVisuals.js";
 import { isFollowUpDue } from "../utils/calculations.js";
 import { escapeHtml } from "../utils/format.js";
+import { t } from "../i18n/index.js";
 
 const columns = [
-  ["name", "Creator"],
-  ["platform", "Platform"],
-  ["status", "Status"],
-  ["priority", "Priority"],
-  ["days", "NSAP Upload Age"],
-  ["collabPosted", "Collab"],
-  ["dmSent", "DM"],
-  ["quickNote", "Quick Note"],
-  ["followUpDate", "Follow-up"],
+  ["name", "table.creator"],
+  ["platform", "filter.platform"],
+  ["status", "filter.status"],
+  ["priority", "filter.priority"],
+  ["days", "table.nsapUploadAge"],
+  ["collabPosted", "table.collab"],
+  ["dmSent", "table.dm"],
+  ["quickNote", "table.quickNote"],
+  ["followUpDate", "table.followUp"],
 ];
 
 const editableSelects = {
@@ -22,8 +23,8 @@ const editableSelects = {
 };
 
 export function renderCreatorsTable({ rows, total, page, maxPage, pageSize, sort, columnWidths, permissions, quickNoteDrafts, quickNoteSaveStates }) {
-  document.getElementById("resultCount").textContent = `${total} creator${total === 1 ? "" : "s"} found`;
-  document.getElementById("pageIndicator").textContent = `Page ${page} of ${maxPage}`;
+  document.getElementById("resultCount").textContent = t("creators.found", { count: total, suffix: total === 1 ? "" : "s" });
+  document.getElementById("pageIndicator").textContent = t("common.page", { page, max: maxPage });
   document.getElementById("prevPage").disabled = page <= 1;
   document.getElementById("nextPage").disabled = page >= maxPage;
   document.getElementById("pageSize").value = String(pageSize);
@@ -40,7 +41,7 @@ export function renderCreatorsTable({ rows, total, page, maxPage, pageSize, sort
   `;
 }
 
-function renderHeaderCell(field, label, sort) {
+function renderHeaderCell(field, labelKey, sort) {
   const active = sort.field === field;
   const direction = active ? sort.direction : "asc";
   const sortIcon = active ? (sort.direction === "desc" ? "&darr;" : "&uarr;") : "";
@@ -48,7 +49,7 @@ function renderHeaderCell(field, label, sort) {
   return `
     <div class="table-cell header-cell ${active ? "sorted" : ""}" role="columnheader">
       <button data-sort="${field}" data-direction="${direction}" type="button">
-        ${escapeHtml(label)}
+        ${escapeHtml(t(labelKey))}
         <span class="sort-icon" aria-hidden="true">${sortIcon}</span>
       </button>
       <span class="column-resizer" data-resize-column="${field}" aria-hidden="true"></span>
@@ -84,8 +85,8 @@ function renderInlineQuickNote(creator, permissions, quickNoteDrafts, quickNoteS
   const saveState = quickNoteSaveStates?.get(creator.id);
   return `
     <label class="inline-field notes-inline">
-      <span>Quick Note</span>
-      <input data-inline-field="quickNote" data-creator-id="${escapeHtml(creator.id)}" type="text" value="${escapeHtml(value)}" placeholder="Waiting for reply..." ${disabled} />
+      <span>${t("table.quickNote")}</span>
+      <input data-inline-field="quickNote" data-creator-id="${escapeHtml(creator.id)}" type="text" value="${escapeHtml(value)}" placeholder="${t("table.waitingReply")}" ${disabled} />
       <small class="field-save-status state-${escapeHtml(saveState?.state || "idle")}" data-quick-note-state="${escapeHtml(creator.id)}" ${saveState ? "" : "hidden"}>${escapeHtml(saveState?.label || "")}</small>
     </label>
   `;
@@ -94,10 +95,10 @@ function renderInlineQuickNote(creator, permissions, quickNoteDrafts, quickNoteS
 function renderFollowUpDate(creator) {
   const due = isFollowUpDue(creator.followUpDate);
   if (!creator.followUpDate) {
-    return `<span class="muted-text">No follow-up</span>`;
+    return `<span class="muted-text">${t("table.noFollowUp")}</span>`;
   }
 
-  return `<span class="followup-pill ${due ? "followup-due" : ""}">${escapeHtml(creator.followUpDate)}${due ? " due" : ""}</span>`;
+  return `<span class="followup-pill ${due ? "followup-due" : ""}">${escapeHtml(creator.followUpDate)}${due ? ` ${t("table.due")}` : ""}</span>`;
 }
 
 function renderInlineSelect(creator, field, permissions) {
@@ -106,7 +107,7 @@ function renderInlineSelect(creator, field, permissions) {
     <label class="inline-field">
       <span>${escapeHtml(field)}</span>
       <select data-inline-field="${escapeHtml(field)}" data-creator-id="${escapeHtml(creator.id)}" ${disabled}>
-        ${editableSelects[field].map((option) => `<option value="${escapeHtml(option)}" ${creator[field] === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
+        ${editableSelects[field].map((option) => `<option value="${escapeHtml(option)}" ${creator[field] === option ? "selected" : ""}>${escapeHtml(t(`value.${option}`))}</option>`).join("")}
       </select>
     </label>
   `;
@@ -115,8 +116,8 @@ function renderInlineSelect(creator, field, permissions) {
 function renderEmptyRow() {
   return `
     <div class="empty-table">
-      <strong>No creators match these filters.</strong>
-      <span>Try clearing filters or changing the search query.</span>
+      <strong>${t("creators.empty")}</strong>
+      <span>${t("creators.emptyHint")}</span>
     </div>
   `;
 }

@@ -58,28 +58,45 @@ function buildPostgresCreatorUpsert(c, now = new Date().toISOString()) {
   return { sql, params, columns: POSTGRES_CREATOR_COLUMNS };
 }
 
-function applyCreatorNsapDecision(creator, decision, user, decidedAt = new Date().toISOString()) {
-  if (!creator.latestChannelVideoUrl || !creator.latestChannelUploadDate) {
-    const error = new Error("Sync YouTube before reviewing NSAP content.");
-    error.status = 400;
-    throw error;
+function applyCreatorNsapReview(creator, review, automaticResult, user, decidedAt = new Date().toISOString()) {
+  if (review.decision === "manual_confirmed") {
+    creator.latestNsapVideoTitle = review.videoTitle;
+    creator.latestNsapVideoUrl = review.videoUrl;
+    creator.latestNsapUploadDate = review.videoUploadDate;
+    creator.nsapMatchStatus = "manual_confirmed";
+    creator.nsapMatchReason = `Manually confirmed by ${user?.username || "Manager"}`;
+    creator.nsapMatchedKeyword = "";
+  } else {
+    applyAutomaticNsapResult(creator, automaticResult);
   }
-  const confirmed = decision === "confirmed";
-  if (confirmed) {
-    creator.latestNsapVideoTitle = creator.latestChannelVideoTitle;
-    creator.latestNsapVideoUrl = creator.latestChannelVideoUrl;
-    creator.latestNsapUploadDate = creator.latestChannelUploadDate;
+
+  if (review.decision === "clear_manual_decision") {
+    clearNsapDecisionFields(creator);
+  } else {
+    creator.nsapDecisionVideoTitle = review.videoTitle;
+    creator.nsapDecisionVideoUrl = review.videoUrl;
+    creator.nsapDecisionVideoUploadDate = review.videoUploadDate;
+    creator.nsapDecisionActor = user?.username || "Manager";
+    creator.nsapDecisionAt = decidedAt;
   }
-  creator.nsapMatchStatus = confirmed ? "manual_confirmed" : "manual_rejected";
-  creator.nsapMatchReason = `${confirmed ? "Marked as NSAP content" : "Marked as unrelated"} by ${user?.username || "Manager"}`;
-  creator.nsapMatchedKeyword = "";
-  creator.nsapDecisionVideoTitle = creator.latestChannelVideoTitle;
-  creator.nsapDecisionVideoUrl = creator.latestChannelVideoUrl;
-  creator.nsapDecisionVideoUploadDate = creator.latestChannelUploadDate;
-  creator.nsapDecisionActor = user?.username || "Manager";
-  creator.nsapDecisionAt = decidedAt;
   creator.updatedAt = decidedAt;
   return creator;
+}
+
+function applyAutomaticNsapResult(creator, result = {}) {
+  [
+    "latestChannelVideoTitle", "latestChannelVideoUrl", "latestChannelUploadDate",
+    "latestNsapVideoTitle", "latestNsapVideoUrl", "latestNsapUploadDate",
+    "nsapMatchStatus", "nsapMatchReason", "nsapMatchedKeyword",
+  ].forEach((field) => { creator[field] = result[field] || ""; });
+}
+
+function clearNsapDecisionFields(creator) {
+  creator.nsapDecisionVideoTitle = "";
+  creator.nsapDecisionVideoUrl = "";
+  creator.nsapDecisionVideoUploadDate = "";
+  creator.nsapDecisionActor = "";
+  creator.nsapDecisionAt = "";
 }
 function creatorSelect() {
   if (db.type === "postgres") {
@@ -277,36 +294,59 @@ async function updateCreatorYouTubeSync({creatorId,result,user,ip}) {
   });
 }
 
-async function updateCreatorNsapDecision({creatorId,decision,user,ip}) {
+async function getCreatorNsapReviews(creatorId, tx = db) {
+  return tx.all(`SELECT * FROM creator_nsap_video_reviews WHERE creator_id=${marker(1)} ORDER BY updated_at DESC, id DESC`, [creatorId]);
+}
+
+async function updateCreatorNsapDecision({creatorId,review,automaticResult,user,ip}) {
   return db.transaction(async (tx) => {
     const creator = await getCreator(creatorId, tx);
     if (!creator || creator.deleted) return null;
+    if (review.decision !== "clear_manual_decision" && !isCurrentNsapCandidate(creator, review)) {
+      const error = new Error("The selected video is stale. Refresh the profile and review the current candidate.");
+      error.status = 409;
+      throw error;
+    }
     const oldValue = {
       latestNsapVideoTitle: creator.latestNsapVideoTitle,
       latestNsapVideoUrl: creator.latestNsapVideoUrl,
       latestNsapUploadDate: creator.latestNsapUploadDate,
       nsapMatchStatus: creator.nsapMatchStatus,
     };
-    applyCreatorNsapDecision(creator, decision, user);
+    if (review.decision === "clear_manual_decision") {
+      await tx.run(`DELETE FROM creator_nsap_video_reviews WHERE creator_id=${marker(1)}`, [creatorId]);
+    } else {
+      const values = [creatorId, review.videoUrl, review.videoTitle, review.videoUploadDate, review.decision, user?.username || "Manager"];
+      if (db.type === "postgres") {
+        await tx.run("INSERT INTO creator_nsap_video_reviews (creator_id,video_url,video_title,video_upload_date,decision,actor) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(creator_id,video_url) DO UPDATE SET video_title=EXCLUDED.video_title,video_upload_date=EXCLUDED.video_upload_date,decision=EXCLUDED.decision,actor=EXCLUDED.actor,updated_at=NOW()", values);
+      } else {
+        await tx.run("INSERT INTO creator_nsap_video_reviews (creator_id,video_url,video_title,video_upload_date,decision,actor) VALUES (?,?,?,?,?,?) ON CONFLICT(creator_id,video_url) DO UPDATE SET video_title=excluded.video_title,video_upload_date=excluded.video_upload_date,decision=excluded.decision,actor=excluded.actor,updated_at=CURRENT_TIMESTAMP", values);
+      }
+    }
+    applyCreatorNsapReview(creator, review, automaticResult, user);
     await upsertCreator(creator, tx);
     await insertAudit({
       user,
-      action: `creator.youtube.nsap.${creator.nsapMatchStatus}`,
+      action: `creator.youtube.nsap.${review.decision}`,
       creatorId,
       field: "nsapMatchStatus",
       oldValue,
       newValue: {
-        status: creator.nsapMatchStatus,
-        videoTitle: creator.nsapDecisionVideoTitle,
-        videoUrl: creator.nsapDecisionVideoUrl,
-        videoUploadDate: creator.nsapDecisionVideoUploadDate,
-        actor: creator.nsapDecisionActor,
-        timestamp: creator.nsapDecisionAt,
+        decision: review.decision,
+        candidate: review.decision === "clear_manual_decision" ? null : { title: review.videoTitle, url: review.videoUrl, uploadDate: review.videoUploadDate },
+        automaticStatus: creator.nsapMatchStatus,
       },
       ip,
     }, tx);
     return getCreator(creatorId, tx);
   });
+}
+
+function isCurrentNsapCandidate(creator, review) {
+  return [
+    [creator.latestNsapVideoTitle, creator.latestNsapVideoUrl, creator.latestNsapUploadDate],
+    [creator.latestChannelVideoTitle, creator.latestChannelVideoUrl, creator.latestChannelUploadDate],
+  ].some(([title, url, date]) => title === review.videoTitle && url === review.videoUrl && date === review.videoUploadDate);
 }
 
 async function getYouTubeChannelMapping(cacheKey) {
@@ -343,4 +383,4 @@ function appendTimeline(c,e){c.timeline=Array.isArray(c.timeline)?c.timeline:[];
 function stringify(v){return v==null?null:typeof v==="string"?v:JSON.stringify(v);}
 function assertUnique(all,c){const norm=v=>String(v||"").trim().toLowerCase();if(all.some(x=>norm(x.name)===norm(c.name)||(c.channel&&norm(x.channel)===norm(c.channel))||(c.discordId&&x.discordId===c.discordId))){const e=new Error("A creator with this name, channel, or Discord ID already exists.");e.status=409;throw e;}}
 
-module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorNsapDecision,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{applyCreatorNsapDecision,buildPostgresCreatorUpsert,isPlainObject,mapCreatorRow,serializeCreatorPayload}};
+module.exports={addTimelineEntry,closeDatabase,createCreator,createSession,deleteSession,getAuditLog,getBackups,getCreator,getCreatorNsapReviews,getCreators,getSessionUser,getUser,getUsers,getYouTubeChannelMapping,initDatabase,insertAudit,insertBackup,markDmSent,replaceCreators,restoreBackup,setYouTubeChannelMapping,softDeleteCreator,updateCreatorField,updateCreatorNsapDecision,updateCreatorProfile,updateCreatorYouTubeSync,updateUserRole,upsertUser,__testing:{applyCreatorNsapReview,buildPostgresCreatorUpsert,isCurrentNsapCandidate,isPlainObject,mapCreatorRow,serializeCreatorPayload}};

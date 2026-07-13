@@ -1,13 +1,7 @@
 import { escapeHtml, safeUrl } from "../utils/format.js";
+import { t } from "../i18n/index.js";
 
 const roles = ["viewer", "manager", "administrator", "owner"];
-const roleLabels = {
-  viewer: "Viewer",
-  manager: "Manager",
-  administrator: "Administrator",
-  owner: "Owner",
-};
-
 export function renderAdmin({ users, audit, backups, permissions }) {
   renderUsers(users, permissions);
   renderBackups(backups, permissions);
@@ -18,12 +12,12 @@ function renderUsers(users, permissions) {
   const container = document.getElementById("usersList");
 
   if (!permissions.canManageUsers) {
-    container.innerHTML = `<p class="empty-state">Administrator role required.</p>`;
+    container.innerHTML = `<p class="empty-state">${t("admin.required")}</p>`;
     return;
   }
 
   if (!users.length) {
-    container.innerHTML = `<p class="empty-state">No users yet.</p>`;
+    container.innerHTML = `<p class="empty-state">${t("admin.noUsers")}</p>`;
     return;
   }
 
@@ -37,7 +31,7 @@ function renderUsers(users, permissions) {
         </div>
       </div>
       <select data-user-role="${escapeHtml(user.discord_id)}">
-        ${roles.map((role) => `<option value="${role}" ${role === user.role ? "selected" : ""}>${roleLabels[role]}</option>`).join("")}
+        ${roles.map((role) => `<option value="${role}" ${role === user.role ? "selected" : ""}>${escapeHtml(t(`role.${role}`))}</option>`).join("")}
       </select>
     </article>
   `).join("");
@@ -47,12 +41,12 @@ function renderBackups(backups, permissions) {
   const container = document.getElementById("backupsList");
 
   if (!permissions.canRestoreBackups) {
-    container.innerHTML = `<p class="empty-state">Administrator role required.</p>`;
+    container.innerHTML = `<p class="empty-state">${t("admin.required")}</p>`;
     return;
   }
 
   if (!backups.length) {
-    container.innerHTML = `<p class="empty-state">No server backups yet.</p>`;
+    container.innerHTML = `<p class="empty-state">${t("admin.noBackups")}</p>`;
     return;
   }
 
@@ -60,9 +54,9 @@ function renderBackups(backups, permissions) {
     <article class="admin-row">
       <div>
         <strong>${escapeHtml(backup.reason)}</strong>
-        <span>${escapeHtml(backup.type || "manual")} / ${escapeHtml(backup.created_at)} by ${escapeHtml(backup.created_by_username || "System")}</span>
+        <span>${escapeHtml(backup.type || t("admin.manual"))} / ${escapeHtml(backup.created_at)} ${escapeHtml(t("admin.by"))} ${escapeHtml(backup.created_by_username || t("common.system"))}</span>
       </div>
-      <button class="button button-secondary" data-restore-backup="${backup.id}" type="button">Restore</button>
+      <button class="button button-secondary" data-restore-backup="${backup.id}" type="button">${t("admin.restore")}</button>
     </article>
   `).join("");
 }
@@ -71,14 +65,14 @@ function renderAudit(audit) {
   const container = document.getElementById("auditList");
 
   if (!audit.length) {
-    container.innerHTML = `<p class="empty-state">No audit events yet.</p>`;
+    container.innerHTML = `<p class="empty-state">${t("admin.noAudit")}</p>`;
     return;
   }
 
   container.innerHTML = audit.map((event) => `
     <article class="audit-row">
       <strong>${escapeHtml(event.action)}</strong>
-      <span>${escapeHtml(event.username || "Unknown")} / ${escapeHtml(event.discord_id || "anonymous")}</span>
+      <span>${escapeHtml(event.username || t("common.unknown"))} / ${escapeHtml(event.discord_id || t("admin.anonymous"))}</span>
       <span>${escapeHtml(event.creator_id || "-")} ${escapeHtml(event.field || "")}</span>
       <code>${escapeHtml(event.old_value || "")} -> ${escapeHtml(event.new_value || "")}</code>
       <time>${escapeHtml(event.timestamp)}</time>

@@ -37,7 +37,7 @@ function createYouTubeClient({ fetchImpl = globalThis.fetch, mappingStore, throt
   const rssCache = new Map();
   const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", removeNSPrefix: true, trimValues: true });
 
-  async function syncCreator(creator) {
+  async function syncCreator(creator, options = {}) {
     const youtubeUrl = creator.youtubeUrl || (creator.platform === "YouTube" ? creator.url : "");
     if (!youtubeUrl) {
       if (["TikTok", "Twitch", "X", "X/Twitter"].includes(creator.platform)) {
@@ -48,7 +48,7 @@ function createYouTubeClient({ fetchImpl = globalThis.fetch, mappingStore, throt
     const channel = parseYouTubeChannelUrl(youtubeUrl);
     const channelId = channel.channelId || await resolveHandle(channel, youtubeUrl);
     const feed = await fetchFeed(channelId);
-    return { ...feed, channelId };
+    return { ...selectYouTubeFeed(feed.entries, options.excludedVideoUrls), channelId };
   }
 
   async function resolveHandle(channel, originalUrl) {
@@ -136,7 +136,14 @@ function parseYouTubeFeed(xml, parser = new XMLParser({ ignoreAttributes: false,
     .sort((a, b) => Date.parse(b.published) - Date.parse(a.published));
   const newest = uploads[0];
   if (!newest) throw new YouTubeSyncError("no_uploads", "No uploads found.");
-  const nsapUpload = uploads.find((entry) => matchNsapContent(entry).matched);
+  return { ...selectYouTubeFeed(uploads), entries: uploads };
+}
+
+function selectYouTubeFeed(uploads, excludedVideoUrls = []) {
+  const newest = uploads[0];
+  if (!newest) throw new YouTubeSyncError("no_uploads", "No uploads found.");
+  const excluded = new Set(excludedVideoUrls || []);
+  const nsapUpload = uploads.find((entry) => !excluded.has(entry.url) && matchNsapContent(entry).matched);
   const nsapMatch = nsapUpload ? matchNsapContent(nsapUpload) : matchNsapContent();
   return {
     latestChannelUploadDate: newest.published.slice(0, 10),
@@ -162,4 +169,4 @@ async function limitedText(response) {
   return (await response.text()).slice(0, 2_000_000);
 }
 
-module.exports = { RequestThrottle, YouTubeSyncError, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed };
+module.exports = { RequestThrottle, YouTubeSyncError, createYouTubeClient, extractChannelIdFromHtml, parseYouTubeChannelUrl, parseYouTubeFeed, selectYouTubeFeed };

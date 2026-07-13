@@ -1,4 +1,5 @@
 import { getOptions } from "../utils/calculations.js";
+import { t } from "../i18n/index.js";
 import { escapeHtml } from "../utils/format.js";
 
 export function renderFilterOptions(creators, state) {
@@ -15,8 +16,11 @@ export function renderFilterOptions(creators, state) {
 function renderSelect(id, options, value) {
   const select = document.getElementById(id);
   select.innerHTML = [
-    `<option value="all">All</option>`,
-    ...options.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`),
+    `<option value="all">${t("common.all")}</option>`,
+    ...options.map((option) => {
+      const translated = t(`value.${option}`);
+      return `<option value="${escapeHtml(option)}">${escapeHtml(translated === `value.${option}` ? option : translated)}</option>`;
+    }),
   ].join("");
 
   select.value = value;

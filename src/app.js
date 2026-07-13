@@ -7,6 +7,7 @@ import { renderDashboard } from "./ui/dashboard.js";
 import { renderCreatorsTable } from "./ui/creatorsTable.js";
 import { renderFilterOptions } from "./ui/filters.js";
 import {
+  getNsapReviewCandidate,
   getFormValues,
   openAddCreatorModal,
   openCreatorModal,
@@ -17,8 +18,9 @@ import {
 } from "./ui/modal.js";
 import { renderSettings } from "./ui/settings.js";
 import { showToast } from "./ui/toast.js";
+import { applyStaticTranslations, setLanguage, t } from "./i18n/index.js";
 
-const unsavedMessage = "You have unsaved changes. Are you sure you want to leave?";
+const unsavedMessage = () => t("common.unsavedPrompt");
 
 const defaultState = {
   view: "dashboard",
@@ -89,6 +91,7 @@ let adminData = {
   backups: [],
 };
 
+applyStaticTranslations();
 init();
 
 async function init() {
@@ -104,10 +107,10 @@ async function init() {
     applySettings();
     await loadAdminData();
     renderAll();
-    setSaveState("Database data loaded");
+    setSaveState(t("save.databaseLoaded"));
   } catch (error) {
-    setSaveState("Could not load creator data");
-    showToast(error.message || "Could not load creator data", "error");
+    setSaveState(t("save.couldNotLoad"));
+    showToast(error.message || t("save.couldNotLoad"), "error");
     console.error(error);
   }
 }
@@ -198,6 +201,7 @@ function wireEvents() {
   document.getElementById("resetLocalData").addEventListener("click", refreshCreators);
   document.getElementById("accentColor").addEventListener("input", updateAccentColor);
   document.getElementById("densityMode").addEventListener("change", updateDensity);
+  document.getElementById("languageMode").addEventListener("change", (event) => setLanguage(event.target.value));
   document.getElementById("saveSettings").addEventListener("click", saveSettingsChanges);
   document.getElementById("syncAllYouTube").addEventListener("click", startYouTubeSyncAll);
   document.getElementById("createBackup").addEventListener("click", createBackup);
@@ -208,6 +212,15 @@ function wireEvents() {
   document.getElementById("sidebarResizer").addEventListener("pointerdown", handleSidebarResize);
   document.addEventListener("keydown", handleKeyboardShortcuts);
   window.addEventListener("beforeunload", handleBeforeUnload);
+  window.addEventListener("languagechange", () => {
+    applyStaticTranslations();
+    renderAll();
+    const creator = activeCreatorId ? getCreatorById(activeCreatorId) : null;
+    if (creator && document.getElementById("creatorDialog").open && modalMode === "timeline") {
+      openCreatorModal(creator, session.permissions);
+      initializeModalDirty("timeline");
+    }
+  });
 }
 
 function renderAll() {
@@ -440,15 +453,16 @@ function handleModalClick(event) {
     return;
   }
 
-  const nsapDecision = event.target.closest("[data-nsap-decision]");
+  const nsapDecision = event.target.closest("[data-nsap-review]");
   if (nsapDecision) {
-    setCreatorNsapDecision(nsapDecision.dataset.creatorId, nsapDecision.dataset.nsapDecision);
+    setCreatorNsapDecision(nsapDecision.dataset.creatorId, nsapDecision.dataset.nsapReview);
+    return;
   }
 }
 
 function handleInlineEdit(event) {
   if (!session.permissions.canEdit) {
-    showToast("Manager role required", "error");
+    showToast(t("error.managerRequired"), "error");
     renderCreators();
     return;
   }
@@ -472,7 +486,7 @@ function handleInlineInput(event) {
   }
 
   if (!session.permissions.canEdit) {
-    showToast("Manager role required", "error");
+    showToast(t("error.managerRequired"), "error");
     renderCreators();
     return;
   }
@@ -560,7 +574,7 @@ function setQuickNoteSaveState(creatorId, stateName, label, fade = false) {
 
 function handleOpenAddCreator() {
   if (!session.permissions.canEdit) {
-    showToast("Manager role required", "error");
+    showToast(t("error.managerRequired"), "error");
     return;
   }
 
@@ -575,7 +589,7 @@ function handleOpenAddCreator() {
 
 async function createCreator(button) {
   if (!session.permissions.canEdit) {
-    showToast("Manager role required", "error");
+    showToast(t("error.managerRequired"), "error");
     return;
   }
 
@@ -584,12 +598,12 @@ async function createCreator(button) {
   }
 
   if (!isModalValid()) {
-    showToast("Creator Name is required.", "error");
+    showToast(t("error.creatorNameRequired"), "error");
     return;
   }
 
   setSaveLoading(button, true);
-  setModalWorkflowState("saving", "Saving...");
+  setModalWorkflowState("saving", t("save.saving"));
   try {
     const payload = getFormValues("addCreatorForm");
     const response = await api.createCreator(payload);
@@ -599,14 +613,14 @@ async function createCreator(button) {
     resetModalDirty();
     renderAll();
     document.getElementById("creatorDialog").close();
-    showToast("Creator added successfully.");
+    showToast(t("message.creatorAdded"));
   } catch (error) {
-    setModalWorkflowState("failed", "Save failed");
+    setModalWorkflowState("failed", t("save.failed"));
     console.error("Add Creator failed", {
       error,
       payload: getFormValues("addCreatorForm"),
     });
-    showToast(error.message || "Unable to add creator. Please check the form and try again.", "error");
+    showToast(error.message || t("error.creatorAddFailed"), "error");
   } finally {
     setSaveLoading(button, false);
   }
@@ -614,7 +628,7 @@ async function createCreator(button) {
 
 async function saveCreatorProfile(creatorId, button) {
   if (!session.permissions.canEdit) {
-    showToast("Manager role required", "error");
+    showToast(t("error.managerRequired"), "error");
     return;
   }
 
@@ -623,7 +637,7 @@ async function saveCreatorProfile(creatorId, button) {
   }
 
   setSaveLoading(button, true);
-  setModalWorkflowState("saving", "Saving...");
+  setModalWorkflowState("saving", t("save.saving"));
   try {
     const response = await api.updateCreatorProfile(creatorId, getFormValues("editCreatorForm"));
     replaceCreator(response.creator);
@@ -633,10 +647,10 @@ async function saveCreatorProfile(creatorId, button) {
     activeCreatorId = response.creator.id;
     openCreatorModal(response.creator, session.permissions);
     initializeModalDirty("timeline");
-    setModalWorkflowState("saved", "Saved", true);
-    showToast("Changes saved successfully.");
+    setModalWorkflowState("saved", t("save.saved"), true);
+    showToast(t("message.changesSaved"));
   } catch (error) {
-    setModalWorkflowState("failed", "Save failed");
+    setModalWorkflowState("failed", t("save.failed"));
     showToast(error.message, "error");
   } finally {
     setSaveLoading(button, false);
@@ -645,7 +659,7 @@ async function saveCreatorProfile(creatorId, button) {
 
 async function deleteCreator(creatorId) {
   if (!session.permissions.canDeleteCreators) {
-    showToast("Administrator role required", "error");
+    showToast(t("error.administratorRequired"), "error");
     return;
   }
 
@@ -657,7 +671,7 @@ async function deleteCreator(creatorId) {
     resetModalDirty();
     document.getElementById("creatorDialog").close();
     renderAll();
-    showToast("Creator deleted");
+    showToast(t("message.creatorDeleted"));
   } catch (error) {
     showToast(error.message, "error");
   }
@@ -672,17 +686,17 @@ async function addTimelineEntry(creatorId, button) {
   }
 
   setSaveLoading(button, true);
-  setModalWorkflowState("saving", "Saving...");
+  setModalWorkflowState("saving", t("save.saving"));
   try {
     const response = await api.addTimelineEntry(creatorId, { type, message });
     replaceCreator(response.creator);
     resetModalDirty();
     renderCreatorDetails(response.creator, session.permissions);
     initializeModalDirty("timeline");
-    setModalWorkflowState("saved", "Saved", true);
-    showToast("Changes saved successfully.");
+    setModalWorkflowState("saved", t("save.saved"), true);
+    showToast(t("message.changesSaved"));
   } catch (error) {
-    setModalWorkflowState("failed", "Save failed");
+    setModalWorkflowState("failed", t("save.failed"));
     showToast(error.message, "error");
   } finally {
     setSaveLoading(button, false);
@@ -698,7 +712,7 @@ async function copyCreatorReminder(creatorId) {
   const templateKey = document.getElementById("reminderTemplate")?.value || "inactivity";
   const template = reminderTemplates[templateKey] || reminderTemplates.inactivity;
   await copyText(template.build(creator));
-  showToast("Reminder copied");
+  showToast(t("message.reminderCopied"));
 
   if (session.permissions.canEdit) {
     try {
@@ -716,21 +730,21 @@ async function copyCreatorReminder(creatorId) {
 
 async function markCreatorDmSent(creatorId) {
   if (!session.permissions.canEdit) {
-    showToast("Manager role required", "error");
+    showToast(t("error.managerRequired"), "error");
     return;
   }
 
   try {
     pendingSaveRequests += 1;
-    setModalWorkflowState("saving", "Saving...");
+    setModalWorkflowState("saving", t("save.saving"));
     const response = await api.markDmSent(creatorId);
     replaceCreator(response.creator);
     renderAll();
     openCreatorModal(response.creator, session.permissions);
-    setModalWorkflowState("saved", "Saved", true);
-    showToast("DM marked sent");
+    setModalWorkflowState("saved", t("save.saved"), true);
+    showToast(t("message.dmMarkedSent"));
   } catch (error) {
-    setModalWorkflowState("failed", "Save failed");
+    setModalWorkflowState("failed", t("save.failed"));
     showToast(error.message, "error");
   } finally {
     pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
@@ -739,11 +753,11 @@ async function markCreatorDmSent(creatorId) {
 
 async function syncYouTubeCreator(creatorId) {
   if (!session.permissions.canEdit) {
-    showToast("Manager role required", "error");
+    showToast(t("error.managerRequired"), "error");
     return;
   }
   pendingSaveRequests += 1;
-  setModalWorkflowState("saving", "Syncing...");
+  setModalWorkflowState("saving", t("sync.syncing"));
   try {
     const response = await api.syncYouTubeCreator(creatorId);
     replaceCreator(response.creator);
@@ -753,10 +767,10 @@ async function syncYouTubeCreator(creatorId) {
     openCreatorModal(response.creator, session.permissions);
     initializeModalDirty("timeline");
     const succeeded = response.creator.syncStatus === "synced";
-    setModalWorkflowState(succeeded ? "saved" : "failed", succeeded ? "Synced" : "Sync failed", succeeded);
-    showToast(succeeded ? "YouTube activity synced" : response.creator.syncError || "YouTube sync failed", succeeded ? "success" : "error");
+    setModalWorkflowState(succeeded ? "saved" : "failed", succeeded ? t("sync.synced") : t("sync.failed"), succeeded);
+    showToast(succeeded ? t("sync.activitySynced") : response.creator.syncError || t("sync.failed"), succeeded ? "success" : "error");
   } catch (error) {
-    setModalWorkflowState("failed", "Sync failed");
+    setModalWorkflowState("failed", t("sync.failed"));
     showToast(error.message, "error");
   } finally {
     pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
@@ -765,23 +779,48 @@ async function syncYouTubeCreator(creatorId) {
 
 async function setCreatorNsapDecision(creatorId, decision) {
   if (!session.permissions.canEdit) {
-    showToast("Manager role required", "error");
+    showToast(t("error.managerRequired"), "error");
     return;
   }
+
+  const creator = getCreatorById(creatorId);
+  const candidate = creator ? getNsapReviewCandidate(creator) : null;
+  if (decision !== "clear_manual_decision" && !candidate) {
+    showToast(t("review.noCandidate"), "error");
+    return;
+  }
+
+  const promptKey = decision === "manual_confirmed"
+    ? "review.confirmPrompt"
+    : decision === "manual_rejected"
+      ? "review.rejectPrompt"
+      : "review.clearPrompt";
+  if (!window.confirm(t(promptKey, { title: candidate?.videoTitle || creator?.nsapDecisionVideoTitle || t("common.unknown") }))) {
+    return;
+  }
+
+  const payload = decision === "clear_manual_decision"
+    ? { decision }
+    : { decision, ...candidate };
   pendingSaveRequests += 1;
-  setModalWorkflowState("saving", "Saving review...");
+  setModalWorkflowState("saving", t("review.saving"));
   try {
-    const response = await api.setNsapDecision(creatorId, decision);
+    const response = await api.setNsapDecision(creatorId, payload);
     replaceCreator(response.creator);
     savedAt = new Date().toISOString();
     renderAll();
     activeCreatorId = response.creator.id;
     openCreatorModal(response.creator, session.permissions);
     initializeModalDirty("timeline");
-    setModalWorkflowState("saved", "Review saved", true);
-    showToast(decision === "confirmed" ? "Marked as NSAP content" : "Marked as unrelated");
+    setModalWorkflowState("saved", t("save.saved"), true);
+    const toastKey = decision === "manual_confirmed"
+      ? "review.confirmed"
+      : decision === "manual_rejected"
+        ? "review.rejected"
+        : "review.cleared";
+    showToast(t(toastKey));
   } catch (error) {
-    setModalWorkflowState("failed", "Review failed");
+    setModalWorkflowState("failed", t("review.failed"));
     showToast(error.message, "error");
   } finally {
     pendingSaveRequests = Math.max(0, pendingSaveRequests - 1);
@@ -816,7 +855,7 @@ async function pollYouTubeSyncJob() {
     if (youtubeSyncJob.status === "completed") {
       creators = (await loadCreators()).creators;
       renderAll();
-      showToast(`YouTube sync complete: ${youtubeSyncJob.completed - youtubeSyncJob.failed} synced, ${youtubeSyncJob.failed} failed`);
+      showToast(t("sync.complete", { synced: youtubeSyncJob.completed - youtubeSyncJob.failed, failed: youtubeSyncJob.failed }));
       return;
     }
     scheduleYouTubeSyncPoll();
@@ -850,19 +889,19 @@ async function updateCreatorField(creatorId, field, value, source) {
 
   try {
     pendingSaveRequests += 1;
-    setSaveState("Saving...");
+    setSaveState(t("save.saving"));
     const response = await api.updateCreator(creatorId, field, value);
     replaceCreator(response.creator);
     undoStack.unshift({ creatorId, field, oldValue });
     undoStack = undoStack.slice(0, 10);
     document.getElementById("undoEdit").disabled = false;
     savedAt = new Date().toISOString();
-    setSaveState("Saved");
-    showToast("Saved");
+    setSaveState(t("save.saved"));
+    showToast(t("save.saved"));
     renderDashboard(creators);
     renderCreators();
   } catch (error) {
-    setSaveState("Save failed");
+    setSaveState(t("save.failed"));
     showToast(error.message, "error");
     renderCreators();
   } finally {
@@ -884,7 +923,7 @@ async function undoLastEdit() {
     const response = await api.updateCreator(snapshot.creatorId, snapshot.field, snapshot.oldValue);
     replaceCreator(response.creator);
     renderAll();
-    showToast("Last edit undone");
+    showToast(t("message.lastEditUndone"));
   } catch (error) {
     showToast(error.message, "error");
   }
@@ -910,7 +949,7 @@ async function copyText(text) {
 
 function exportJson() {
   if (!session.permissions.canImportExport) {
-    showToast("Admin role required", "error");
+    showToast(t("error.adminRequired"), "error");
     return;
   }
 
@@ -926,16 +965,16 @@ async function exportJsonFromApi() {
     anchor.download = `creators-backup-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(anchor.href);
-    showToast("Backup export complete");
+    showToast(t("message.backupExported"));
   } catch (error) {
     console.error("Export Backup failed", { error });
-    showToast(error.message || "Unable to export backup", "error");
+    showToast(error.message || t("error.backupExportFailed"), "error");
   }
 }
 
 async function importJson(event) {
   if (!session.permissions.canImportExport) {
-    showToast("Admin role required", "error");
+    showToast(t("error.adminRequired"), "error");
     event.target.value = "";
     return;
   }
@@ -954,10 +993,10 @@ async function importJson(event) {
     undoStack = [];
     await loadAdminData();
     renderAll();
-    showToast("Import successful");
+    showToast(t("message.importSuccessful"));
   } catch (error) {
     console.error("Import Backup failed", { error });
-    showToast(error.message || "Invalid JSON file", "error");
+    showToast(error.message || t("error.invalidJson"), "error");
   }
 }
 
@@ -966,8 +1005,8 @@ async function refreshCreators() {
   creators = repository.creators;
   await loadAdminData();
   renderAll();
-  setSaveState("Database data refreshed");
-  showToast("Data refreshed");
+  setSaveState(t("message.databaseRefreshed"));
+  showToast(t("message.dataRefreshed"));
 }
 
 async function logout() {
@@ -998,7 +1037,7 @@ async function refreshAdmin() {
   try {
     await loadAdminData();
     renderAll();
-    showToast("Admin data refreshed");
+    showToast(t("message.adminRefreshed"));
   } catch (error) {
     showToast(error.message, "error");
   }
@@ -1006,7 +1045,7 @@ async function refreshAdmin() {
 
 async function createBackup() {
   if (!session.permissions.canRestoreBackups) {
-    showToast("Administrator role required", "error");
+    showToast(t("error.administratorRequired"), "error");
     return;
   }
 
@@ -1014,7 +1053,7 @@ async function createBackup() {
     const response = await api.createBackup();
     adminData.backups = response.backups;
     renderAll();
-    showToast("Backup created");
+    showToast(t("message.backupCreated"));
   } catch (error) {
     showToast(error.message, "error");
   }
@@ -1030,7 +1069,7 @@ async function handleUserRoleChange(event) {
     await api.updateUserRole(select.dataset.userRole, select.value);
     await loadAdminData();
     renderAll();
-    showToast("User role updated");
+    showToast(t("message.roleUpdated"));
   } catch (error) {
     showToast(error.message, "error");
     await refreshAdmin();
@@ -1049,7 +1088,7 @@ async function handleBackupRestore(event) {
     undoStack = [];
     await loadAdminData();
     renderAll();
-    showToast("Backup restored");
+    showToast(t("message.backupRestored"));
   } catch (error) {
     showToast(error.message, "error");
   }
@@ -1100,7 +1139,7 @@ function serializeForm(formId) {
 
 function setModalDirty(isDirty) {
   modalDirty = Boolean(isDirty);
-  if (modalDirty && !modalSaving) setModalWorkflowState("unsaved", "Unsaved changes");
+  if (modalDirty && !modalSaving) setModalWorkflowState("unsaved", t("settings.unsaved"));
   if (!modalDirty && !modalSaving) setModalWorkflowState("idle", "");
   updateModalDirtyUi();
 }
@@ -1178,7 +1217,7 @@ function confirmLeaveModal() {
     return true;
   }
 
-  const confirmed = window.confirm(unsavedMessage);
+  const confirmed = window.confirm(unsavedMessage());
   if (confirmed) {
     resetModalDirty();
   }
@@ -1190,7 +1229,7 @@ function confirmLeaveDirty() {
     return true;
   }
 
-  const confirmed = window.confirm(unsavedMessage);
+  const confirmed = window.confirm(unsavedMessage());
   if (confirmed) {
     resetModalDirty();
     settingsDraft = { ...settings };
@@ -1221,7 +1260,7 @@ function handleBeforeUnload(event) {
   }
 
   event.preventDefault();
-  event.returnValue = unsavedMessage;
+  event.returnValue = unsavedMessage();
 }
 
 function hasUnsavedWork() {
@@ -1289,10 +1328,10 @@ function saveSettingsChanges() {
     setSettingsDirty(false);
     applySettings(settings);
     resultState = "saved";
-    showToast("Changes saved successfully.");
+    showToast(t("message.changesSaved"));
   } catch (error) {
     resultState = "failed";
-    showToast(error.message || "Unable to save settings", "error");
+    showToast(error.message || t("error.settingsSaveFailed"), "error");
     updateSettingsDirtyUi();
   } finally {
     settingsSaving = false;
@@ -1384,7 +1423,7 @@ function handleKeyboardShortcuts(event) {
       return;
     }
 
-    showToast("No unsaved changes.");
+    showToast(t("message.noUnsavedChanges"));
     return;
   }
 
